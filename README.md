@@ -9,7 +9,9 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 
 - **Upload & parse** bofhound log files (drag-and-drop or file picker)
 - **SQLite storage** — logs are persisted between sessions; switch between multiple uploads
-- **Object table** with key columns: name / SAM account, object type, account status, last logon, password age, last changed
+- **Object table** with sortable columns: name / SAM account, object type, account status, description, last logon, password age, last changed
+  - Click any column header to sort ascending / descending; active column is highlighted with a ↑ / ↓ indicator
+  - Description is truncated in the table; full text appears on hover
 - **Sidebar filters**
   - Object type (user, computer, group, OU, GPO, schema objects, …) with object counts
   - Last logon — preset buttons (30 d / 90 d / 6 m / 1 y) or custom date
@@ -17,10 +19,11 @@ Upload a `.log` file collected from a domain environment, then search, filter an
   - Object last changed — same presets / custom date
   - Admin accounts only toggle
   - Full-text search across all fields
-- **Detail panel** — click any object to see every attribute, with:
-  - Timestamps decoded from Windows FILETIME and LDAP Generalized Time to human-readable dates
+- **Detail panel** — click any row to see every attribute grouped by category, with:
+  - Timestamps decoded from Windows FILETIME and LDAP Generalized Time to human-readable dates + relative age
   - `userAccountControl` decoded to readable flag badges (Enabled / Disabled / Locked / No Pwd Expiry / …)
   - Long binary fields (e.g. `nTSecurityDescriptor`) collapsed by default with an expand toggle
+  - **DN navigation** — any Distinguished Name value is a clickable link that opens the referenced object directly in the detail panel; a **← Back** button lets you retrace your path (e.g. open a group → click a `member` DN → navigate to that user)
 - **Multiple log support** — upload logs from several DCs and switch between them via the top bar
 
 ---
@@ -118,7 +121,10 @@ Simple-ADExplorer/
 ├── app.py              # Flask application — parser, SQLite logic, REST API
 ├── requirements.txt    # Python dependencies
 ├── templates/
-│   └── index.html      # Single-page dark-mode frontend (Tailwind CSS, vanilla JS)
+│   └── index.html      # HTML structure only (no inline CSS or JS)
+├── static/
+│   ├── style.css       # All custom styles (dark theme, badges, layout)
+│   └── app.js          # All application logic (state, API calls, rendering)
 ├── instance/           # Created at runtime — contains bofhound.db (SQLite)
 ├── uploads/            # Created at runtime — stores uploaded log files
 └── data_origin/        # Sample log files (not committed if added to .gitignore)
@@ -134,8 +140,9 @@ Simple-ADExplorer/
 | `POST` | `/api/upload` | Upload and parse a log file |
 | `GET` | `/api/uploads` | List all uploaded logs |
 | `DELETE` | `/api/uploads/<id>` | Delete an upload and all its objects |
-| `GET` | `/api/objects` | List objects with optional filters (see below) |
+| `GET` | `/api/objects` | List objects with optional filters and sorting (see below) |
 | `GET` | `/api/objects/<id>` | Full detail for one object |
+| `GET` | `/api/objects/by-dn` | Look up an object by exact Distinguished Name |
 | `GET` | `/api/classes` | Object-type counts for the filter sidebar |
 | `GET` | `/api/stats` | Summary counts (total, users, computers, groups) |
 
@@ -150,5 +157,14 @@ Simple-ADExplorer/
 | `pwd_changed_after` | ISO-8601 | Objects with `pwdLastSet` after this date |
 | `changed_after` | ISO-8601 | Objects with `whenChanged` after this date |
 | `admin_only` | `1` | Only objects with `adminCount=1` |
+| `sort_by` | string | Column to sort by: `cn`, `primary_class`, `description`, `user_account_control`, `last_logon`, `pwd_last_set`, `when_changed` (default: `when_changed`) |
+| `sort_dir` | `asc` / `desc` | Sort direction (default: `desc`); objects with no value always appear last |
 | `page` | int | Page number (default `1`) |
 | `per_page` | int | Results per page (default `50`, max `200`) |
+
+### `/api/objects/by-dn` query parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dn` | string | Exact Distinguished Name to look up |
+| `upload_id` | int | Restrict the search to one upload (recommended) |
