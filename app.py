@@ -360,6 +360,22 @@ def api_list_objects():
     if admin_only:
         where.append("admin_count = 1")
 
+    # Sorting
+    _SORT_EXPRS = {
+        "cn":                   "LOWER(COALESCE(cn, ''))",
+        "primary_class":        "LOWER(COALESCE(primary_class, ''))",
+        "user_account_control": "user_account_control",
+        "last_logon":           "MAX(COALESCE(last_logon, ''), COALESCE(last_logon_timestamp, ''))",
+        "pwd_last_set":         "pwd_last_set",
+        "when_changed":         "when_changed",
+    }
+    sort_by  = p.get("sort_by",  "when_changed")
+    sort_dir = p.get("sort_dir", "desc").lower()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+    sort_expr = _SORT_EXPRS.get(sort_by, "when_changed")
+    order_sql = f"{sort_expr} {sort_dir.upper()} NULLS LAST"
+
     sql_where = " AND ".join(where)
     offset = (page - 1) * per_page
 
@@ -375,7 +391,7 @@ def api_list_objects():
                        last_logon, last_logon_timestamp, bad_password_time,
                        user_account_control, admin_count
                 FROM objects WHERE {sql_where}
-                ORDER BY when_changed DESC NULLS LAST, id ASC
+                ORDER BY {order_sql}
                 LIMIT ? OFFSET ?""",
             params + [per_page, offset],
         ).fetchall()

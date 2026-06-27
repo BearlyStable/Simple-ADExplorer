@@ -91,7 +91,10 @@ select:focus {
 .preset-btn.active { border-color: #3b82f6; background: #1e3a5f; color: #93c5fd; }
 
 /* ── Table header ─────────────────────────────────────────────────────────── */
-thead th { position: sticky; top: 0; background: #1e293b; z-index: 10; }
+thead th              { position: sticky; top: 0; background: #1e293b; z-index: 10; }
+thead th[data-sort]   { cursor: pointer; user-select: none; }
+thead th[data-sort]:hover { color: #93c5fd !important; }
+.sort-icon            { opacity: 0.5; margin-left: 3px; font-style: normal; }
 
 /* ── Detail panel ─────────────────────────────────────────────────────────── */
 .detail-key { color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; min-width: 160px; }

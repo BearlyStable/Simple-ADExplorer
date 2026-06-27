@@ -138,6 +138,8 @@ const state = {
   logonPreset: null,
   pwdPreset: null,
   changedPreset: null,
+  sortBy: 'when_changed',
+  sortDir: 'desc',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,9 +258,45 @@ function buildQueryParams() {
   if (state.pwdDate)             p.set('pwd_changed_after', state.pwdDate + 'T00:00:00+00:00');
   if (state.changedDate)         p.set('changed_after',    state.changedDate + 'T00:00:00+00:00');
   if (state.adminOnly)           p.set('admin_only',       '1');
+  p.set('sort_by',  state.sortBy);
+  p.set('sort_dir', state.sortDir);
   p.set('page',     state.page);
   p.set('per_page', state.perPage);
   return p;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Column sorting
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setSortColumn(col) {
+  if (state.sortBy === col) {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    state.sortBy  = col;
+    // sensible defaults: dates descend (newest first), text ascends
+    const dateCols = new Set(['last_logon', 'pwd_last_set', 'when_changed']);
+    state.sortDir = dateCols.has(col) ? 'desc' : 'asc';
+  }
+  state.page = 1;
+  updateSortHeaders();
+  loadObjects();
+}
+
+function updateSortHeaders() {
+  qsa('th[data-sort]').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    if (th.dataset.sort === state.sortBy) {
+      icon.textContent = state.sortDir === 'asc' ? '↑' : '↓';
+      icon.style.opacity = '1';
+      th.style.color = '#93c5fd';
+    } else {
+      icon.textContent = '↕';
+      icon.style.opacity = '0.4';
+      th.style.color = '';
+    }
+  });
 }
 
 async function loadObjects() {
@@ -711,5 +749,11 @@ qs('#do-upload-btn').addEventListener('click', async () => {
 async function refreshAll() {
   await Promise.all([loadStats(), loadClasses(), loadObjects()]);
 }
+
+// Wire up sortable column headers
+qsa('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => setSortColumn(th.dataset.sort));
+});
+updateSortHeaders();
 
 loadUploads();
