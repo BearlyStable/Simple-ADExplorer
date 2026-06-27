@@ -81,6 +81,53 @@ waitress-serve --port=5000 app:app
 
 ---
 
+## Docker
+
+### Build the image
+
+```bash
+make release
+# or with a custom version tag
+make release VERSION=1.0.0
+```
+
+### Run with `docker run`
+
+```bash
+docker run -d \
+  -p 5000:5000 \
+  -v adexplorer-instance:/app/instance \
+  -v adexplorer-uploads:/app/uploads \
+  --name adexplorer \
+  simple-adexplorer:latest
+```
+
+Named volumes keep the SQLite database and uploaded log files alive across container restarts and upgrades, while always starting empty on first use.
+
+### Run with Docker Compose
+
+A ready-made `docker-compose.yml` is included:
+
+```bash
+docker compose up -d
+```
+
+To stop without losing data:
+
+```bash
+docker compose down
+```
+
+To stop **and wipe all data** (volumes included):
+
+```bash
+docker compose down -v
+```
+
+The compose file uses named volumes and sets `restart: unless-stopped` so the container starts automatically after a reboot.
+
+---
+
 ## Usage
 
 1. Open **http://localhost:5000** in your browser.
@@ -120,6 +167,9 @@ Objects are separated by a line of dashes (`--------------------`).
 Simple-ADExplorer/
 ├── app.py              # Flask application — parser, SQLite logic, REST API
 ├── requirements.txt    # Python dependencies
+├── Makefile            # setup / run / release / clean targets
+├── Dockerfile          # Production image (gunicorn, python:3.11-slim)
+├── docker-compose.yml  # Compose file with volume mounts for persistence
 ├── templates/
 │   └── index.html      # HTML structure only (no inline CSS or JS)
 ├── static/
@@ -168,3 +218,11 @@ Simple-ADExplorer/
 |-----------|------|-------------|
 | `dn` | string | Exact Distinguished Name to look up |
 | `upload_id` | int | Restrict the search to one upload (recommended) |
+
+
+## TODO
+
+- add parser for sysinternals snapshot files
+    - use https://github.com/c3c/ADExplorerSnapshot
+    - `pip3 install rich bloodhound-ce requests dissect`
+    - `python3 ADExplorerSnapshot/ADExplorerSnapshot.py -o output/ -m BOFHound uploads/new/upload`

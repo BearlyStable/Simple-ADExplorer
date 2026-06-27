@@ -9,14 +9,18 @@ endif
 VENV_PYTHON := $(VENV_BIN)/python
 PIP         := $(VENV_BIN)/pip
 
-.PHONY: setup run clean help
+IMAGE   := simple-adexplorer
+VERSION := latest
+
+.PHONY: setup run clean release help
 
 help:
 	@echo "Usage: make [target]"
 	@echo ""
-	@echo "  setup   create virtual environment and install dependencies"
-	@echo "  run     start the Flask development server (runs setup if needed)"
-	@echo "  clean   remove the virtual environment"
+	@echo "  setup    create virtual environment and install dependencies"
+	@echo "  run      start the Flask development server (runs setup if needed)"
+	@echo "  release  build Docker image $(IMAGE):$(VERSION)"
+	@echo "  clean    remove the virtual environment"
 
 setup: .venv/pyvenv.cfg
 
@@ -28,6 +32,10 @@ setup: .venv/pyvenv.cfg
 
 run: .venv/pyvenv.cfg
 	$(VENV_PYTHON) app.py
+
+release:
+	docker build -t $(IMAGE):$(VERSION) .
+	@echo "Built $(IMAGE):$(VERSION)"
 
 clean:
 	rm -rf .venv

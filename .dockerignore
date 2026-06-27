@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+instance/
+uploads/
+data_origin/
+.git/
