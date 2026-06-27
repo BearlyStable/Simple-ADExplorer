@@ -333,14 +333,20 @@ function renderObjects(objects) {
       ? (o.last_logon > o.last_logon_timestamp ? o.last_logon : o.last_logon_timestamp)
       : (o.last_logon || o.last_logon_timestamp);
 
-    const logonCell   = bestLogon     ? `<span title="${fmtDate(bestLogon)}">${timeAgo(bestLogon)}</span>`         : `<span style="color:#334155">Never</span>`;
-    const pwdCell     = o.pwd_last_set ? `<span title="${fmtDate(o.pwd_last_set)}">${timeAgo(o.pwd_last_set)}</span>` : `<span style="color:#334155">—</span>`;
-    const changedCell = o.when_changed ? `<span title="${fmtDate(o.when_changed)}">${timeAgo(o.when_changed)}</span>` : '—';
+    const logonCell   = bestLogon      ? `<span title="${fmtDate(bestLogon)}">${timeAgo(bestLogon)}</span>`          : `<span style="color:#334155">Never</span>`;
+    const pwdCell     = o.pwd_last_set  ? `<span title="${fmtDate(o.pwd_last_set)}">${timeAgo(o.pwd_last_set)}</span>` : `<span style="color:#334155">—</span>`;
+    const changedCell = o.when_changed  ? `<span title="${fmtDate(o.when_changed)}">${timeAgo(o.when_changed)}</span>` : '—';
+
+    const desc = o.description || '';
+    const descCell = desc
+      ? `<span title="${esc(desc)}" style="color:#94a3b8">${esc(desc.length > 60 ? desc.slice(0, 58) + '…' : desc)}</span>`
+      : `<span style="color:#334155">—</span>`;
 
     return `<tr class="row-hover" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
       <td style="padding:7px 10px">${nameCell}</td>
       <td style="padding:7px 10px">${classBadge(o.primary_class)}</td>
       <td style="padding:7px 10px">${statusBadge(o.user_account_control, o.admin_count)}</td>
+      <td style="padding:7px 10px">${descCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${logonCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${pwdCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${changedCell}</td>

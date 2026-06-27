@@ -365,6 +365,7 @@ def api_list_objects():
         "cn":                   "LOWER(COALESCE(cn, ''))",
         "primary_class":        "LOWER(COALESCE(primary_class, ''))",
         "user_account_control": "user_account_control",
+        "description":          "LOWER(COALESCE(description, ''))",
         "last_logon":           "MAX(COALESCE(last_logon, ''), COALESCE(last_logon_timestamp, ''))",
         "pwd_last_set":         "pwd_last_set",
         "when_changed":         "when_changed",
