@@ -1,0 +1,126 @@
+body {
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: #1e293b; }
+::-webkit-scrollbar-thumb  { background: #475569; border-radius: 3px; }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+.sidebar       { width: 260px; min-width: 260px; }
+.detail-panel  { width: 480px; min-width: 480px; }
+
+/* ── Table rows ───────────────────────────────────────────────────────────── */
+.row-hover:hover { background: #1e3a5f !important; cursor: pointer; }
+
+/* ── Badges ───────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-width: 1px;
+}
+.field-long { word-break: break-all; font-size: 0.72rem; color: #94a3b8; }
+
+/* Object-type colours */
+.tag-user     { background: #1e3a5f; color: #93c5fd; border-color: #3b82f6; }
+.tag-computer { background: #14352a; color: #6ee7b7; border-color: #10b981; }
+.tag-group    { background: #2e1a5e; color: #c4b5fd; border-color: #8b5cf6; }
+.tag-schema   { background: #1e2535; color: #94a3b8; border-color: #475569; }
+.tag-ou       { background: #3a2a10; color: #fcd34d; border-color: #d97706; }
+.tag-policy   { background: #3a1a10; color: #fb923c; border-color: #ea580c; }
+.tag-cert     { background: #0e3535; color: #5eead4; border-color: #0d9488; }
+.tag-default  { background: #1e293b; color: #94a3b8; border-color: #334155; }
+
+/* UAC badges */
+.uac-disabled { background: #7f1d1d; color: #fca5a5; border-color: #991b1b; }
+.uac-ok       { background: #14352a; color: #6ee7b7; border-color: #10b981; }
+.uac-flag     { background: #1e293b; color: #94a3b8; border-color: #334155; }
+
+/* ── Stat cards ───────────────────────────────────────────────────────────── */
+.stat-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+/* ── Form controls ────────────────────────────────────────────────────────── */
+input[type=text],
+input[type=date],
+select {
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  width: 100%;
+  font-size: 0.8rem;
+}
+input[type=text]:focus,
+input[type=date]:focus,
+select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn         { padding: 5px 14px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+.btn-primary { background: #2563eb; color: #fff; border: none; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-danger  { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
+.btn-danger:hover  { background: #991b1b; }
+.btn-ghost   { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+.btn-ghost:hover   { background: #1e293b; color: #e2e8f0; }
+
+/* ── Sidebar filters ──────────────────────────────────────────────────────── */
+.filter-section { border-bottom: 1px solid #1e293b; padding: 12px 0; }
+.filter-label   { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 6px; }
+
+.class-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 0.78rem; }
+.class-item:hover  { background: #1e293b; }
+.class-item.active { background: #1e3a5f; color: #93c5fd; }
+
+.preset-btn        { padding: 3px 8px; border-radius: 4px; font-size: 0.72rem; cursor: pointer; border: 1px solid #334155; background: #1e293b; color: #94a3b8; }
+.preset-btn:hover  { border-color: #3b82f6; color: #93c5fd; }
+.preset-btn.active { border-color: #3b82f6; background: #1e3a5f; color: #93c5fd; }
+
+/* ── Table header ─────────────────────────────────────────────────────────── */
+thead th { position: sticky; top: 0; background: #1e293b; z-index: 10; }
+
+/* ── Detail panel ─────────────────────────────────────────────────────────── */
+.detail-key { color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; min-width: 160px; }
+.detail-val { color: #e2e8f0; font-size: 0.8rem; word-break: break-word; }
+
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+.progress-bar  { height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3b82f6; border-radius: 2px; transition: width 0.3s; }
+
+/* ── Upload modal ─────────────────────────────────────────────────────────── */
+.overlay  { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; }
+.modal    { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; width: 460px; max-width: 95vw; }
+.drop-zone        { border: 2px dashed #334155; border-radius: 8px; padding: 32px; text-align: center; cursor: pointer; color: #64748b; transition: all 0.2s; }
+.drop-zone.dragover { border-color: #3b82f6; background: #0f1f40; color: #93c5fd; }
+
+/* ── Pagination ───────────────────────────────────────────────────────────── */
+.pagination-btn         { padding: 4px 10px; border-radius: 4px; font-size: 0.78rem; border: 1px solid #334155; background: #1e293b; color: #94a3b8; cursor: pointer; }
+.pagination-btn:hover   { border-color: #3b82f6; color: #93c5fd; }
+.pagination-btn:disabled { opacity: 0.4; cursor: default; }
+.pagination-btn.current { border-color: #3b82f6; background: #1e3a5f; color: #93c5fd; }
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  padding: 10px 18px; border-radius: 8px;
+  font-size: 0.85rem; font-weight: 500;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+
+/* ── DN navigation links ──────────────────────────────────────────────────── */
+.dn-link       { color: #60a5fa; text-decoration: none; cursor: pointer; }
+.dn-link:hover { text-decoration: underline; }

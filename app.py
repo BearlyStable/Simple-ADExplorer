@@ -388,6 +388,28 @@ def api_list_objects():
     })
 
 
+@app.route("/api/objects/by-dn")
+def api_by_dn():
+    dn  = request.args.get("dn", "").strip()
+    uid = request.args.get("upload_id", type=int)
+    if not dn:
+        return jsonify(error="Missing dn parameter"), 400
+    with get_db() as conn:
+        if uid:
+            row = conn.execute(
+                "SELECT id FROM objects WHERE upload_id=? AND distinguished_name=?",
+                (uid, dn),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id FROM objects WHERE distinguished_name=? LIMIT 1",
+                (dn,),
+            ).fetchone()
+    if not row:
+        return jsonify(error="Not found"), 404
+    return jsonify({"id": row["id"]})
+
+
 @app.route("/api/objects/<int:oid>")
 def api_get_object(oid):
     with get_db() as conn:
