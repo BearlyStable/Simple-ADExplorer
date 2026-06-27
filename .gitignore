@@ -15,3 +15,7 @@
 /uploads
 /instance
 /.venv
+/ADExplorerSnapshot
+/adex_deps
+__pycache__/
+*.pyc

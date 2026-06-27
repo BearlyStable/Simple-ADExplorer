@@ -17,17 +17,24 @@ VERSION := latest
 help:
 	@echo "Usage: make [target]"
 	@echo ""
-	@echo "  setup    create virtual environment and install dependencies"
+	@echo "  setup    clone conversion tools, create venv, install dependencies"
 	@echo "  run      start the Flask development server (runs setup if needed)"
 	@echo "  release  build Docker image $(IMAGE):$(VERSION)"
 	@echo "  clean    remove the virtual environment"
 
-setup: .venv/pyvenv.cfg
+setup: .venv/pyvenv.cfg adex_deps/.installed
 
-.venv/pyvenv.cfg: requirements.txt
+ADExplorerSnapshot/ADExplorerSnapshot.py:
+	git clone --depth 1 https://github.com/c3c/ADExplorerSnapshot.git ADExplorerSnapshot
+
+.venv/pyvenv.cfg: requirements.txt ADExplorerSnapshot/ADExplorerSnapshot.py
 	$(PYTHON) -m venv .venv
 	$(PIP) install --upgrade pip --quiet
 	$(PIP) install -r requirements.txt --quiet
+
+adex_deps/.installed: .venv/pyvenv.cfg
+	$(PIP) install --target adex_deps rich bloodhound-ce requests dissect --quiet
+	touch adex_deps/.installed
 	@echo "Setup complete. Run 'make run' to start the server."
 
 run: .venv/pyvenv.cfg

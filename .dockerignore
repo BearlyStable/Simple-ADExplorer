@@ -5,4 +5,6 @@ __pycache__/
 instance/
 uploads/
 data_origin/
+ADExplorerSnapshot/
+adex_deps/
 .git/

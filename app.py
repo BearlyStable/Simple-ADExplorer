@@ -3,6 +3,10 @@ import json
 import sqlite3
 import re
 import uuid
+import sys
+import shutil
+import subprocess
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -13,6 +17,8 @@ BASE_DIR = Path(__file__).parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 INSTANCE_DIR = BASE_DIR / "instance"
 DB_PATH = INSTANCE_DIR / "bofhound.db"
+ADEXPLORER_SCRIPT = BASE_DIR / "ADExplorerSnapshot" / "ADExplorerSnapshot.py"
+ADEX_DEPS         = BASE_DIR / "adex_deps"
 
 UPLOAD_DIR.mkdir(exist_ok=True)
 INSTANCE_DIR.mkdir(exist_ok=True)
@@ -240,6 +246,44 @@ def store_objects(upload_id: int, objects: list[dict]):
         )
 
 
+# ── ADExplorer snapshot conversion ───────────────────────────────────────────
+
+def convert_adsnapshot(snapshot_path: str) -> str:
+    """Convert a .adsnapshot file to a bofhound .log using ADExplorerSnapshot.
+    Returns path to the converted log file (temporary — caller must delete it)."""
+    if not ADEXPLORER_SCRIPT.exists():
+        raise RuntimeError(
+            "ADExplorerSnapshot tool not found. "
+            "Run: git clone --depth 1 https://github.com/c3c/ADExplorerSnapshot.git ADExplorerSnapshot"
+        )
+
+    tmp_out = Path(tempfile.mkdtemp(prefix="adex_"))
+    try:
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(ADEX_DEPS) + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+
+        result = subprocess.run(
+            [sys.executable, str(ADEXPLORER_SCRIPT), "-o", str(tmp_out), "-m", "BOFHound", snapshot_path],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env=env,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Conversion failed with no output")
+
+        logs = list(tmp_out.glob("*.log"))
+        if not logs:
+            raise RuntimeError("Conversion produced no .log output file")
+
+        # Move out of the temp dir before it is deleted
+        out_path = snapshot_path + ".converted.log"
+        shutil.move(str(logs[0]), out_path)
+        return out_path
+    finally:
+        shutil.rmtree(str(tmp_out), ignore_errors=True)
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -260,11 +304,20 @@ def api_upload():
     dest = UPLOAD_DIR / stored
     f.save(str(dest))
 
+    converted_log = None
     try:
-        objects = parse_log(str(dest))
+        if orig.lower().endswith(".adsnapshot"):
+            converted_log = convert_adsnapshot(str(dest))
+            log_path = converted_log
+        else:
+            log_path = str(dest)
+        objects = parse_log(log_path)
     except Exception as exc:
         dest.unlink(missing_ok=True)
-        return jsonify(error=f"Parse error: {exc}"), 500
+        return jsonify(error=str(exc)), 500
+    finally:
+        if converted_log:
+            Path(converted_log).unlink(missing_ok=True)
 
     with get_db() as conn:
         cur = conn.execute(

@@ -7,7 +7,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 
 ## Features
 
-- **Upload & parse** bofhound log files (drag-and-drop or file picker)
+- **Upload & parse** bofhound `.log` files and SysInternals ADExplorer `.adsnapshot` files (drag-and-drop or file picker); snapshots are converted automatically via [ADExplorerSnapshot](https://github.com/c3c/ADExplorerSnapshot)
 - **SQLite storage** — logs are persisted between sessions; switch between multiple uploads
 - **Object table** with sortable columns: name / SAM account, object type, account status, description, last logon, password age, last changed
   - Click any column header to sort ascending / descending; active column is highlighted with a ↑ / ↓ indicator
@@ -220,9 +220,3 @@ Simple-ADExplorer/
 | `upload_id` | int | Restrict the search to one upload (recommended) |
 
 
-## TODO
-
-- add parser for sysinternals snapshot files
-    - use https://github.com/c3c/ADExplorerSnapshot
-    - `pip3 install rich bloodhound-ce requests dissect`
-    - `python3 ADExplorerSnapshot/ADExplorerSnapshot.py -o output/ -m BOFHound uploads/new/upload`
