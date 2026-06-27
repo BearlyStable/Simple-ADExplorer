@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BofHound Viewer</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background:#0f172a; color:#e2e8f0; font-family:'Consolas','Courier New',monospace; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:#1e293b; }
+  ::-webkit-scrollbar-thumb { background:#475569; border-radius:3px; }
+  .sidebar { width:260px; min-width:260px; }
+  .detail-panel { width:480px; min-width:480px; }
+  .row-hover:hover { background:#1e3a5f !important; cursor:pointer; }
+  .badge { display:inline-block; padding:1px 7px; border-radius:9999px; font-size:0.7rem; font-weight:600; border-width:1px; }
+  .field-long { word-break:break-all; font-size:0.72rem; color:#94a3b8; }
+  .tag-user     { background:#1e3a5f; color:#93c5fd; border-color:#3b82f6; }
+  .tag-computer { background:#14352a; color:#6ee7b7; border-color:#10b981; }
+  .tag-group    { background:#2e1a5e; color:#c4b5fd; border-color:#8b5cf6; }
+  .tag-schema   { background:#1e2535; color:#94a3b8; border-color:#475569; }
+  .tag-ou       { background:#3a2a10; color:#fcd34d; border-color:#d97706; }
+  .tag-policy   { background:#3a1a10; color:#fb923c; border-color:#ea580c; }
+  .tag-cert     { background:#0e3535; color:#5eead4; border-color:#0d9488; }
+  .tag-default  { background:#1e293b; color:#94a3b8; border-color:#334155; }
+  .uac-disabled { background:#7f1d1d; color:#fca5a5; border-color:#991b1b; }
+  .uac-ok       { background:#14352a; color:#6ee7b7; border-color:#10b981; }
+  .uac-flag     { background:#1e293b; color:#94a3b8; border-color:#334155; }
+  .stat-card    { background:#1e293b; border:1px solid #334155; border-radius:8px; padding:12px 16px; }
+  input[type=text], input[type=date], select {
+    background:#0f172a; border:1px solid #334155; color:#e2e8f0;
+    border-radius:6px; padding:5px 10px; width:100%; font-size:0.8rem;
+  }
+  input[type=text]:focus, input[type=date]:focus, select:focus {
+    outline:none; border-color:#3b82f6;
+  }
+  .btn { padding:5px 14px; border-radius:6px; font-size:0.8rem; font-weight:500; cursor:pointer; transition:background 0.15s; }
+  .btn-primary { background:#2563eb; color:#fff; border:none; }
+  .btn-primary:hover { background:#1d4ed8; }
+  .btn-danger  { background:#7f1d1d; color:#fca5a5; border:1px solid #991b1b; }
+  .btn-danger:hover  { background:#991b1b; }
+  .btn-ghost   { background:transparent; color:#94a3b8; border:1px solid #334155; }
+  .btn-ghost:hover   { background:#1e293b; color:#e2e8f0; }
+  .filter-section { border-bottom:1px solid #1e293b; padding:12px 0; }
+  .filter-label { font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin-bottom:6px; }
+  .class-item { display:flex; justify-content:space-between; align-items:center; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:0.78rem; }
+  .class-item:hover { background:#1e293b; }
+  .class-item.active { background:#1e3a5f; color:#93c5fd; }
+  .preset-btn { padding:3px 8px; border-radius:4px; font-size:0.72rem; cursor:pointer; border:1px solid #334155; background:#1e293b; color:#94a3b8; }
+  .preset-btn:hover { border-color:#3b82f6; color:#93c5fd; }
+  .preset-btn.active { border-color:#3b82f6; background:#1e3a5f; color:#93c5fd; }
+  thead th { position:sticky; top:0; background:#1e293b; z-index:10; }
+  .detail-key { color:#64748b; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; min-width:160px; }
+  .detail-val { color:#e2e8f0; font-size:0.8rem; word-break:break-word; }
+  .progress-bar { height:4px; background:#1e293b; border-radius:2px; overflow:hidden; }
+  .progress-fill { height:100%; background:#3b82f6; border-radius:2px; transition:width 0.3s; }
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; display:flex; align-items:center; justify-content:center; }
+  .modal { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:24px; width:460px; max-width:95vw; }
+  .drop-zone { border:2px dashed #334155; border-radius:8px; padding:32px; text-align:center; cursor:pointer; color:#64748b; transition:all 0.2s; }
+  .drop-zone.dragover { border-color:#3b82f6; background:#0f1f40; color:#93c5fd; }
+  .pagination-btn { padding:4px 10px; border-radius:4px; font-size:0.78rem; border:1px solid #334155; background:#1e293b; color:#94a3b8; cursor:pointer; }
+  .pagination-btn:hover { border-color:#3b82f6; color:#93c5fd; }
+  .pagination-btn:disabled { opacity:0.4; cursor:default; }
+  .pagination-btn.current { border-color:#3b82f6; background:#1e3a5f; color:#93c5fd; }
+  #toast { position:fixed; bottom:24px; right:24px; z-index:999; padding:10px 18px; border-radius:8px; font-size:0.85rem; font-weight:500; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+</style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+<!-- TOP BAR -->
+<header style="background:#1e293b;border-bottom:1px solid #334155" class="flex items-center gap-3 px-4 py-2 shrink-0">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+  <span style="font-size:1rem;font-weight:700;color:#60a5fa;letter-spacing:0.02em">BofHound Viewer</span>
+  <span style="color:#475569;font-size:0.75rem;margin-left:4px">Active Directory Log Analyzer</span>
+  <div class="ml-auto flex items-center gap-2">
+    <select id="upload-select" style="min-width:280px">
+      <option value="">— no log loaded —</option>
+    </select>
+    <button class="btn btn-ghost" id="delete-upload-btn" title="Delete selected log" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    </button>
+    <button class="btn btn-primary" id="upload-btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-right:5px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload Log
+    </button>
+  </div>
+</header>
+
+<!-- MAIN LAYOUT -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar flex flex-col overflow-hidden shrink-0" style="background:#1e293b;border-right:1px solid #334155">
+    <div class="flex-1 overflow-y-auto px-3 py-3">
+
+      <!-- Search -->
+      <div class="filter-section" style="padding-top:0">
+        <div class="filter-label">Search</div>
+        <input type="text" id="search-input" placeholder="name, SAM, DN, value…">
+      </div>
+
+      <!-- Object Type filter -->
+      <div class="filter-section">
+        <div class="filter-label">Object Type</div>
+        <div id="class-list" style="max-height:220px;overflow-y:auto">
+          <div style="color:#475569;font-size:0.78rem;padding:4px">Loading…</div>
+        </div>
+      </div>
+
+      <!-- Active / Logon filter -->
+      <div class="filter-section">
+        <div class="filter-label">Last Logon</div>
+        <div class="flex flex-wrap gap-1 mb-2" id="logon-presets">
+          <span class="preset-btn" data-days="30">30d</span>
+          <span class="preset-btn" data-days="90">90d</span>
+          <span class="preset-btn" data-days="180">6m</span>
+          <span class="preset-btn" data-days="365">1y</span>
+        </div>
+        <input type="date" id="logon-date" title="Active since (last logon after)">
+      </div>
+
+      <!-- Password Changed filter -->
+      <div class="filter-section">
+        <div class="filter-label">Password Changed</div>
+        <div class="flex flex-wrap gap-1 mb-2" id="pwd-presets">
+          <span class="preset-btn" data-days="30">30d</span>
+          <span class="preset-btn" data-days="90">90d</span>
+          <span class="preset-btn" data-days="180">6m</span>
+          <span class="preset-btn" data-days="365">1y</span>
+        </div>
+        <input type="date" id="pwd-date" title="Password set after">
+      </div>
+
+      <!-- Object Changed filter -->
+      <div class="filter-section">
+        <div class="filter-label">Object Changed</div>
+        <div class="flex flex-wrap gap-1 mb-2" id="changed-presets">
+          <span class="preset-btn" data-days="30">30d</span>
+          <span class="preset-btn" data-days="90">90d</span>
+          <span class="preset-btn" data-days="180">6m</span>
+          <span class="preset-btn" data-days="365">1y</span>
+        </div>
+        <input type="date" id="changed-date" title="Object changed after">
+      </div>
+
+      <!-- Misc toggles -->
+      <div class="filter-section" style="border:none">
+        <div class="filter-label">Flags</div>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.8rem;color:#94a3b8">
+          <input type="checkbox" id="admin-only" style="width:auto;accent-color:#3b82f6"> Admin accounts only
+        </label>
+      </div>
+
+    </div><!-- end scroll -->
+
+    <div style="border-top:1px solid #334155;padding:10px 12px;display:flex;gap:8px">
+      <button class="btn btn-ghost flex-1" id="clear-filters-btn">Clear Filters</button>
+    </div>
+  </aside>
+
+  <!-- CONTENT AREA -->
+  <div class="flex flex-1 flex-col overflow-hidden">
+
+    <!-- STATS + PAGINATION BAR -->
+    <div style="background:#1e293b;border-bottom:1px solid #334155;padding:6px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;shrink-0">
+      <div class="flex gap-3 mr-2">
+        <div class="stat-card" style="padding:4px 12px">
+          <span style="color:#64748b;font-size:0.68rem">TOTAL</span>
+          <span id="stat-total" style="font-weight:700;color:#e2e8f0;margin-left:6px">—</span>
+        </div>
+        <div class="stat-card" style="padding:4px 12px">
+          <span style="color:#93c5fd;font-size:0.68rem">USERS</span>
+          <span id="stat-users" style="font-weight:700;color:#93c5fd;margin-left:6px">—</span>
+        </div>
+        <div class="stat-card" style="padding:4px 12px">
+          <span style="color:#6ee7b7;font-size:0.68rem">COMPUTERS</span>
+          <span id="stat-computers" style="font-weight:700;color:#6ee7b7;margin-left:6px">—</span>
+        </div>
+        <div class="stat-card" style="padding:4px 12px">
+          <span style="color:#c4b5fd;font-size:0.68rem">GROUPS</span>
+          <span id="stat-groups" style="font-weight:700;color:#c4b5fd;margin-left:6px">—</span>
+        </div>
+      </div>
+
+      <span id="filter-info" style="color:#64748b;font-size:0.78rem;margin-left:auto"></span>
+
+      <!-- Pagination -->
+      <div class="flex items-center gap-1" id="pagination-controls" style="margin-left:8px"></div>
+      <select id="per-page-select" style="width:70px;padding:3px 6px">
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+    </div>
+
+    <!-- TABLE + DETAIL split -->
+    <div class="flex flex-1 overflow-hidden">
+
+      <!-- OBJECTS TABLE -->
+      <div class="flex-1 overflow-auto" id="table-container">
+        <table style="width:100%;border-collapse:collapse;font-size:0.78rem">
+          <thead>
+            <tr style="text-align:left;color:#64748b;font-size:0.68rem;letter-spacing:0.06em;text-transform:uppercase">
+              <th style="padding:7px 10px;width:220px;border-bottom:1px solid #334155">Name / SAM</th>
+              <th style="padding:7px 10px;width:130px;border-bottom:1px solid #334155">Type</th>
+              <th style="padding:7px 10px;width:100px;border-bottom:1px solid #334155">Status</th>
+              <th style="padding:7px 10px;width:130px;border-bottom:1px solid #334155">Last Logon</th>
+              <th style="padding:7px 10px;width:130px;border-bottom:1px solid #334155">Pwd Changed</th>
+              <th style="padding:7px 10px;border-bottom:1px solid #334155">Changed</th>
+            </tr>
+          </thead>
+          <tbody id="objects-tbody">
+            <tr><td colspan="6" style="text-align:center;padding:40px;color:#475569">Load a log file to begin</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- DETAIL PANEL -->
+      <div id="detail-panel" class="detail-panel flex-col overflow-hidden" style="display:none;border-left:1px solid #334155;background:#0f172a">
+        <div style="background:#1e293b;border-bottom:1px solid #334155;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;shrink-0">
+          <span style="font-weight:700;color:#e2e8f0;font-size:0.9rem" id="detail-title">Object Details</span>
+          <button id="close-detail-btn" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:1.3rem;line-height:1" title="Close">&times;</button>
+        </div>
+        <div id="detail-content" class="flex-1 overflow-y-auto" style="padding:14px"></div>
+      </div>
+
+    </div><!-- end table+detail split -->
+  </div><!-- end content area -->
+</div><!-- end main layout -->
+
+<!-- UPLOAD MODAL -->
+<div id="upload-modal" class="overlay" style="display:none">
+  <div class="modal">
+    <h2 style="font-size:1.1rem;font-weight:700;color:#e2e8f0;margin-bottom:16px">Upload BofHound Log File</h2>
+    <div class="drop-zone" id="drop-zone">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.5" style="margin:0 auto 10px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p style="font-size:0.85rem">Drop <code>.log</code> file here or <span style="color:#60a5fa;text-decoration:underline;cursor:pointer" id="browse-link">browse</span></p>
+      <p id="selected-file-name" style="color:#60a5fa;font-size:0.8rem;margin-top:6px"></p>
+    </div>
+    <input type="file" id="file-input" accept=".log,.txt" style="display:none">
+    <div id="upload-progress-wrap" style="display:none;margin-top:12px">
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <p id="upload-status" style="color:#94a3b8;font-size:0.78rem;margin-top:6px"></p>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" id="cancel-upload-btn">Cancel</button>
+      <button class="btn btn-primary" id="do-upload-btn" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+function qs(sel, ctx = document) { return ctx.querySelector(sel); }
+function qsa(sel, ctx = document) { return ctx.querySelectorAll(sel); }
+
+function showToast(msg, type = 'ok') {
+  const el = qs('#toast');
+  el.textContent = msg;
+  el.style.background = type === 'ok' ? '#14532d' : '#7f1d1d';
+  el.style.color = type === 'ok' ? '#86efac' : '#fca5a5';
+  el.style.border = type === 'ok' ? '1px solid #16a34a' : '1px solid #991b1b';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+function isoToDate(iso) {
+  if (!iso) return null;
+  return new Date(iso);
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const sec = (Date.now() - d) / 1000;
+  if (sec < 0) return d.toLocaleDateString();
+  if (sec < 3600) return `${Math.round(sec/60)}m ago`;
+  if (sec < 86400) return `${Math.round(sec/3600)}h ago`;
+  if (sec < 86400*30) return `${Math.round(sec/86400)}d ago`;
+  if (sec < 86400*365) return `${Math.round(sec/86400/30)}mo ago`;
+  return `${Math.round(sec/86400/365)}y ago`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
+}
+
+function daysAgoISO(days) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Type badges & UAC
+// ─────────────────────────────────────────────────────────────────────────────
+
+function classBadge(primaryClass) {
+  const c = (primaryClass || '').toLowerCase();
+  let css = 'tag-default', label = primaryClass || '?';
+  if (c === 'user' || c === 'person') { css = 'tag-user'; label = 'user'; }
+  else if (c === 'computer') { css = 'tag-computer'; label = 'computer'; }
+  else if (c === 'group') { css = 'tag-group'; label = 'group'; }
+  else if (c === 'classschema' || c === 'attributeschema' || c === 'subschema') { css = 'tag-schema'; label = c; }
+  else if (c === 'organizationalunit') { css = 'tag-ou'; label = 'OU'; }
+  else if (c === 'grouppolicycontainer') { css = 'tag-policy'; label = 'GPO'; }
+  else if (c === 'pkicertificatetemplate' || c === 'certificationauthority') { css = 'tag-cert'; label = 'PKI'; }
+  else { label = c.length > 18 ? c.slice(0, 16) + '…' : c; }
+  return `<span class="badge ${css}">${esc(label)}</span>`;
+}
+
+const UAC_FLAGS = [
+  [0x0002,     'Disabled',            'uac-disabled'],
+  [0x0010,     'Locked',              'uac-disabled'],
+  [0x0200,     'Normal Acct',         'uac-ok'],
+  [0x2000,     'Interdomain Trust',   'uac-flag'],
+  [0x10000,    'No Pwd Expiry',       'uac-flag'],
+  [0x20000,    'Smartcard Req',       'uac-flag'],
+  [0x80000,    'Trusted Delegation',  'uac-flag'],
+  [0x400000,   'No Preauth',          'uac-disabled'],
+  [0x1000000,  'Auth Delegation',     'uac-flag'],
+];
+
+function uacBadges(uac) {
+  if (!uac) return '';
+  const flags = UAC_FLAGS.filter(([bit]) => uac & bit);
+  if (!flags.length) return `<span class="badge tag-default">${uac}</span>`;
+  return flags.map(([, label, css]) => `<span class="badge ${css}">${label}</span>`).join(' ');
+}
+
+function statusBadge(uac, adminCount) {
+  if (uac === null || uac === undefined) return '<span style="color:#475569">—</span>';
+  const disabled = uac & 0x0002;
+  const locked   = uac & 0x0010;
+  let html = '';
+  if (disabled) html += '<span class="badge uac-disabled">Disabled</span> ';
+  else if (locked) html += '<span class="badge uac-disabled">Locked</span> ';
+  else html += '<span class="badge uac-ok">Enabled</span> ';
+  if (adminCount === 1) html += '<span class="badge" style="background:#3a1a10;color:#fb923c;border-color:#ea580c">Admin</span>';
+  return html;
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+
+const state = {
+  uploads: [],
+  selectedUploadId: null,
+  selectedClassFilter: null,
+  logonDate: '',
+  pwdDate: '',
+  changedDate: '',
+  search: '',
+  adminOnly: false,
+  page: 1,
+  perPage: 50,
+  total: 0,
+  selectedObjectId: null,
+  // track which preset buttons are active
+  logonPreset: null, pwdPreset: null, changedPreset: null,
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API calls
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function api(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Uploads
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function loadUploads() {
+  const data = await api('/api/uploads');
+  state.uploads = data;
+  const sel = qs('#upload-select');
+  sel.innerHTML = '<option value="">— no log loaded —</option>' +
+    data.map(u => `<option value="${u.id}">${esc(u.original_name)} (${u.object_count} objects, ${u.uploaded_at.slice(0,16)})</option>`).join('');
+  if (data.length > 0 && !state.selectedUploadId) {
+    state.selectedUploadId = data[0].id;
+    sel.value = data[0].id;
+  } else if (state.selectedUploadId) {
+    sel.value = state.selectedUploadId;
+  }
+  qs('#delete-upload-btn').style.display = data.length ? '' : 'none';
+  await refreshAll();
+}
+
+qs('#upload-select').addEventListener('change', async e => {
+  state.selectedUploadId = e.target.value ? parseInt(e.target.value) : null;
+  state.page = 1;
+  state.selectedClassFilter = null;
+  qs('#delete-upload-btn').style.display = state.selectedUploadId ? '' : 'none';
+  await refreshAll();
+});
+
+qs('#delete-upload-btn').addEventListener('click', async () => {
+  if (!state.selectedUploadId) return;
+  const name = qs('#upload-select').options[qs('#upload-select').selectedIndex].text;
+  if (!confirm(`Delete "${name}"?\nThis will remove all parsed data.`)) return;
+  const r = await fetch(`/api/uploads/${state.selectedUploadId}`, {method:'DELETE'});
+  if (!r.ok) { showToast('Delete failed', 'err'); return; }
+  state.selectedUploadId = null;
+  showToast('Upload deleted');
+  await loadUploads();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stats & Classes
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  const url = state.selectedUploadId ? `/api/stats?upload_id=${state.selectedUploadId}` : '/api/stats';
+  const s = await api(url);
+  qs('#stat-total').textContent = s.total;
+  qs('#stat-users').textContent = s.users;
+  qs('#stat-computers').textContent = s.computers;
+  qs('#stat-groups').textContent = s.groups;
+}
+
+async function loadClasses() {
+  const url = state.selectedUploadId ? `/api/classes?upload_id=${state.selectedUploadId}` : '/api/classes';
+  const classes = await api(url);
+  const container = qs('#class-list');
+  if (!classes.length) { container.innerHTML = '<div style="color:#475569;font-size:0.78rem;padding:4px">—</div>'; return; }
+
+  const all = `<div class="class-item ${!state.selectedClassFilter ? 'active' : ''}" data-class="">
+    <span>All types</span>
+    <span style="color:#475569;font-size:0.7rem">${classes.reduce((a,c)=>a+c.cnt,0)}</span>
+  </div>`;
+
+  const items = classes.map(c => {
+    const active = state.selectedClassFilter === c.primary_class ? 'active' : '';
+    return `<div class="class-item ${active}" data-class="${esc(c.primary_class)}">
+      <span>${classBadge(c.primary_class)}</span>
+      <span style="color:#475569;font-size:0.7rem">${c.cnt}</span>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = all + items;
+  qsa('.class-item', container).forEach(el => {
+    el.addEventListener('click', () => {
+      const cls = el.dataset.class;
+      state.selectedClassFilter = cls || null;
+      state.page = 1;
+      loadClasses();
+      loadObjects();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Objects
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildQueryParams() {
+  const p = new URLSearchParams();
+  if (state.selectedUploadId) p.set('upload_id', state.selectedUploadId);
+  if (state.search)           p.set('search', state.search);
+  if (state.selectedClassFilter) p.set('object_class', state.selectedClassFilter);
+  if (state.logonDate)        p.set('last_logon_after', state.logonDate + 'T00:00:00+00:00');
+  if (state.pwdDate)          p.set('pwd_changed_after', state.pwdDate + 'T00:00:00+00:00');
+  if (state.changedDate)      p.set('changed_after', state.changedDate + 'T00:00:00+00:00');
+  if (state.adminOnly)        p.set('admin_only', '1');
+  p.set('page', state.page);
+  p.set('per_page', state.perPage);
+  return p;
+}
+
+async function loadObjects() {
+  const tbody = qs('#objects-tbody');
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#475569">Loading…</td></tr>`;
+
+  const data = await api('/api/objects?' + buildQueryParams());
+  state.total = data.total;
+  renderObjects(data.objects);
+  renderPagination(data.total, data.page, data.per_page);
+
+  const filtered = data.total;
+  qs('#filter-info').textContent = filtered > 0
+    ? `Showing ${(data.page-1)*data.per_page+1}–${Math.min(data.page*data.per_page, filtered)} of ${filtered}`
+    : 'No results';
+}
+
+function renderObjects(objects) {
+  const tbody = qs('#objects-tbody');
+  if (!objects.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:#475569">No objects match the current filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = objects.map(o => {
+    const isSelected = o.id === state.selectedObjectId;
+    const bg = isSelected ? 'background:#1e3a5f' : '';
+
+    const nameCell = o.sam_account_name
+      ? `<div style="font-weight:600;color:#e2e8f0">${esc(o.cn || o.distinguished_name.split(',')[0])}</div>
+         <div style="color:#64748b;font-size:0.7rem">${esc(o.sam_account_name)}</div>`
+      : `<div style="font-weight:600;color:#e2e8f0">${esc(o.cn || '?')}</div>
+         <div style="color:#475569;font-size:0.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">${esc((o.distinguished_name||'').replace(/,DC=.+$/,''))}</div>`;
+
+    // best logon = max of last_logon and last_logon_timestamp
+    let bestLogon = null;
+    if (o.last_logon && o.last_logon_timestamp) {
+      bestLogon = o.last_logon > o.last_logon_timestamp ? o.last_logon : o.last_logon_timestamp;
+    } else {
+      bestLogon = o.last_logon || o.last_logon_timestamp;
+    }
+
+    const logonCell = bestLogon
+      ? `<span title="${fmtDate(bestLogon)}">${timeAgo(bestLogon)}</span>`
+      : `<span style="color:#334155">Never</span>`;
+
+    const pwdCell = o.pwd_last_set
+      ? `<span title="${fmtDate(o.pwd_last_set)}">${timeAgo(o.pwd_last_set)}</span>`
+      : `<span style="color:#334155">—</span>`;
+
+    const changedCell = o.when_changed
+      ? `<span title="${fmtDate(o.when_changed)}">${timeAgo(o.when_changed)}</span>`
+      : '—';
+
+    return `<tr class="row-hover" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
+      <td style="padding:7px 10px">${nameCell}</td>
+      <td style="padding:7px 10px">${classBadge(o.primary_class)}</td>
+      <td style="padding:7px 10px">${statusBadge(o.user_account_control, o.admin_count)}</td>
+      <td style="padding:7px 10px;color:#94a3b8">${logonCell}</td>
+      <td style="padding:7px 10px;color:#94a3b8">${pwdCell}</td>
+      <td style="padding:7px 10px;color:#94a3b8">${changedCell}</td>
+    </tr>`;
+  }).join('');
+
+  qsa('tr[data-id]', tbody).forEach(row => {
+    row.addEventListener('click', () => showDetail(parseInt(row.dataset.id)));
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pagination
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderPagination(total, page, perPage) {
+  const totalPages = Math.ceil(total / perPage);
+  const ctrl = qs('#pagination-controls');
+  if (totalPages <= 1) { ctrl.innerHTML = ''; return; }
+
+  const pageNums = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || (p >= page - 2 && p <= page + 2)) {
+      pageNums.push(p);
+    } else if (pageNums.at(-1) !== '…') {
+      pageNums.push('…');
+    }
+  }
+
+  ctrl.innerHTML = `
+    <button class="pagination-btn" id="pg-prev" ${page<=1?'disabled':''}>&#8592;</button>
+    ${pageNums.map(p => p === '…'
+      ? `<span style="color:#475569;padding:0 4px">…</span>`
+      : `<button class="pagination-btn ${p===page?'current':''}" data-page="${p}">${p}</button>`
+    ).join('')}
+    <button class="pagination-btn" id="pg-next" ${page>=totalPages?'disabled':''}>&#8594;</button>
+  `;
+
+  qs('#pg-prev')?.addEventListener('click', () => { if (state.page > 1) { state.page--; loadObjects(); }});
+  qs('#pg-next')?.addEventListener('click', () => { if (state.page < totalPages) { state.page++; loadObjects(); }});
+  qsa('[data-page]', ctrl).forEach(btn => {
+    btn.addEventListener('click', () => { state.page = parseInt(btn.dataset.page); loadObjects(); });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Detail Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function showDetail(id) {
+  state.selectedObjectId = id;
+
+  // highlight selected row
+  qsa('tr[data-id]').forEach(r => {
+    r.style.background = parseInt(r.dataset.id) === id ? '#1e3a5f' : '';
+  });
+
+  const panel = qs('#detail-panel');
+  panel.style.display = 'flex';
+
+  qs('#detail-content').innerHTML = '<div style="color:#475569;padding:20px">Loading…</div>';
+
+  const obj = await api(`/api/objects/${id}`);
+  renderDetail(obj);
+}
+
+const LONG_FIELDS = new Set(['nTSecurityDescriptor', 'auditingPolicy', 'dSASignature',
+  'cACertificate', 'certificateRevocationList', 'deltaRevocationList',
+  'authorityRevocationList', 'retiredReplDSASignatures', 'replUpToDateVector',
+  'dSCorePropagationData', 'msDS-KeyCredentialLink']);
+
+const DATE_FIELDS = new Set(['pwdLastSet','lastLogon','lastLogonTimestamp','badPasswordTime',
+  'creationTime','accountExpires']);
+const GENTIME_FIELDS = new Set(['whenCreated','whenChanged']);
+
+// Field groupings for display order
+const GROUP_ORDER = [
+  ['Identity',    ['cn','name','sAMAccountName','userPrincipalName','distinguishedName','objectGUID','objectSid','objectClass','primaryGroupID']],
+  ['Account',     ['userAccountControl','adminCount','description','givenName','sn','displayName','codePage','countryCode','l','ou']],
+  ['Timestamps',  ['whenCreated','whenChanged','pwdLastSet','lastLogon','lastLogonTimestamp','badPasswordTime','accountExpires','creationTime']],
+  ['Group Info',  ['member','memberOf','groupType']],
+  ['Security',    ['adminCount','nTSecurityDescriptor','auditingPolicy']],
+  ['Replication', ['uSNCreated','uSNChanged','dSCorePropagationData','instanceType','isCriticalSystemObject','systemFlags']],
+];
+
+function renderDetail(obj) {
+  const fields = obj.fields || {};
+  const title = fields.cn || fields.name || obj.cn || 'Object';
+  qs('#detail-title').textContent = title;
+
+  const seen = new Set();
+  let html = '';
+
+  // UAC summary card if present
+  if (fields.userAccountControl !== undefined) {
+    const uac = parseInt(fields.userAccountControl) || 0;
+    html += `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+      <div style="color:#64748b;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Account Status</div>
+      <div>${uacBadges(uac)}</div>
+    </div>`;
+  }
+
+  function renderField(key, val) {
+    if (seen.has(key)) return '';
+    seen.add(key);
+    if (val === undefined || val === null || val === '') return '';
+
+    let displayVal = '';
+    const valStr = Array.isArray(val) ? val.join('\n') : String(val);
+
+    if (DATE_FIELDS.has(key)) {
+      const dt = filetime_client(valStr);
+      if (dt) {
+        displayVal = `<span style="color:#e2e8f0">${fmtDate(dt)}</span> <span style="color:#475569;font-size:0.72rem">(${timeAgo(dt)})</span><br><span style="color:#334155;font-size:0.7rem">raw: ${esc(valStr)}</span>`;
+      } else if (valStr === '0') {
+        displayVal = `<span style="color:#475569">Never / Not set</span>`;
+      } else {
+        displayVal = `<span style="color:#475569;font-size:0.72rem">${esc(valStr)}</span>`;
+      }
+    } else if (GENTIME_FIELDS.has(key)) {
+      const iso = gentimeClient(valStr);
+      if (iso) {
+        displayVal = `<span style="color:#e2e8f0">${fmtDate(iso)}</span> <span style="color:#475569;font-size:0.72rem">(${timeAgo(iso)})</span>`;
+      } else {
+        displayVal = `<span style="color:#e2e8f0">${esc(valStr)}</span>`;
+      }
+    } else if (Array.isArray(val)) {
+      displayVal = val.map(v => `<div style="color:#e2e8f0">${esc(v)}</div>`).join('');
+    } else if (LONG_FIELDS.has(key) || valStr.length > 300) {
+      const shortId = `field-${key}-${obj.id}`;
+      displayVal = `<span style="color:#334155;font-size:0.7rem" id="${shortId}-short">${esc(valStr.slice(0,120))}… <a href="#" style="color:#3b82f6" onclick="toggleLong('${shortId}');return false">show</a></span>
+        <span class="field-long" id="${shortId}-long" style="display:none">${esc(valStr)} <a href="#" style="color:#3b82f6" onclick="toggleLong('${shortId}');return false">hide</a></span>`;
+    } else {
+      displayVal = `<span style="color:#e2e8f0">${esc(valStr)}</span>`;
+    }
+
+    return `<tr>
+      <td class="detail-key" style="padding:5px 10px 5px 0;vertical-align:top;white-space:nowrap">${esc(key)}</td>
+      <td class="detail-val" style="padding:5px 0">${displayVal}</td>
+    </tr>`;
+  }
+
+  // Render grouped fields
+  for (const [groupName, keys] of GROUP_ORDER) {
+    const rows = keys.map(k => renderField(k, fields[k])).join('');
+    if (!rows) continue;
+    html += `<div style="margin-bottom:12px">
+      <div style="color:#3b82f6;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #1e293b">${groupName}</div>
+      <table style="width:100%;border-collapse:collapse">${rows}</table>
+    </div>`;
+  }
+
+  // Remaining fields
+  const remaining = Object.entries(fields)
+    .filter(([k]) => !seen.has(k))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (remaining.length) {
+    const rows = remaining.map(([k, v]) => renderField(k, v)).join('');
+    if (rows) {
+      html += `<div style="margin-bottom:12px">
+        <div style="color:#475569;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #1e293b">Other Attributes</div>
+        <table style="width:100%;border-collapse:collapse">${rows}</table>
+      </div>`;
+    }
+  }
+
+  qs('#detail-content').innerHTML = html || '<div style="color:#475569;padding:20px">No displayable fields.</div>';
+}
+
+function toggleLong(id) {
+  const short = qs(`#${id}-short`);
+  const long  = qs(`#${id}-long`);
+  if (!short || !long) return;
+  const isHidden = long.style.display === 'none';
+  short.style.display = isHidden ? 'none' : '';
+  long.style.display  = isHidden ? '' : 'none';
+}
+window.toggleLong = toggleLong;
+
+// Client-side timestamp helpers (mirrors server logic)
+function filetime_client(raw) {
+  const ft = parseInt(raw);
+  if (!raw || isNaN(ft) || ft <= 0 || ft >= 9223372036854775800) return null;
+  const ms = (ft - 116444736000000000) / 10000;
+  if (ms < 0) return null;
+  return new Date(ms).toISOString();
+}
+
+function gentimeClient(raw) {
+  if (!raw) return null;
+  try {
+    const s = raw.replace(/\.\d+Z?$/, '').replace(/Z$/,'');
+    const y=s.slice(0,4), mo=s.slice(4,6), d=s.slice(6,8);
+    const h=s.slice(8,10)||'00', mi=s.slice(10,12)||'00', sec=s.slice(12,14)||'00';
+    return new Date(`${y}-${mo}-${d}T${h}:${mi}:${sec}Z`).toISOString();
+  } catch { return null; }
+}
+
+qs('#close-detail-btn').addEventListener('click', () => {
+  qs('#detail-panel').style.display = 'none';
+  state.selectedObjectId = null;
+  qsa('tr[data-id]').forEach(r => r.style.background = '');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filters
+// ─────────────────────────────────────────────────────────────────────────────
+
+let searchTimer = null;
+qs('#search-input').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.search = e.target.value.trim();
+    state.page = 1;
+    loadObjects();
+  }, 350);
+});
+
+qs('#admin-only').addEventListener('change', e => {
+  state.adminOnly = e.target.checked;
+  state.page = 1;
+  loadObjects();
+});
+
+qs('#per-page-select').addEventListener('change', e => {
+  state.perPage = parseInt(e.target.value);
+  state.page = 1;
+  loadObjects();
+});
+
+function setupPresets(containerSel, inputSel, stateKey, presetKey) {
+  qsa(`${containerSel} .preset-btn`).forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.dataset.days);
+      const same = state[presetKey] === days;
+      state[presetKey] = same ? null : days;
+      const iso = same ? '' : daysAgoISO(days);
+      state[stateKey] = iso;
+      qs(inputSel).value = iso;
+      qsa(`${containerSel} .preset-btn`).forEach(b => b.classList.toggle('active', !same && parseInt(b.dataset.days) === days));
+      state.page = 1;
+      loadObjects();
+    });
+  });
+  qs(inputSel).addEventListener('change', e => {
+    state[stateKey] = e.target.value;
+    state[presetKey] = null;
+    qsa(`${containerSel} .preset-btn`).forEach(b => b.classList.remove('active'));
+    state.page = 1;
+    loadObjects();
+  });
+}
+
+setupPresets('#logon-presets',   '#logon-date',   'logonDate',   'logonPreset');
+setupPresets('#pwd-presets',     '#pwd-date',     'pwdDate',     'pwdPreset');
+setupPresets('#changed-presets', '#changed-date', 'changedDate', 'changedPreset');
+
+qs('#clear-filters-btn').addEventListener('click', () => {
+  state.search = '';           qs('#search-input').value = '';
+  state.logonDate = '';        qs('#logon-date').value = '';
+  state.pwdDate = '';          qs('#pwd-date').value = '';
+  state.changedDate = '';      qs('#changed-date').value = '';
+  state.adminOnly = false;     qs('#admin-only').checked = false;
+  state.selectedClassFilter = null;
+  state.logonPreset = null;  state.pwdPreset = null;  state.changedPreset = null;
+  qsa('.preset-btn').forEach(b => b.classList.remove('active'));
+  state.page = 1;
+  loadClasses();
+  loadObjects();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Upload
+// ─────────────────────────────────────────────────────────────────────────────
+
+let selectedFile = null;
+
+qs('#upload-btn').addEventListener('click', () => {
+  selectedFile = null;
+  qs('#selected-file-name').textContent = '';
+  qs('#do-upload-btn').disabled = true;
+  qs('#upload-progress-wrap').style.display = 'none';
+  qs('#file-input').value = '';
+  qs('#upload-modal').style.display = 'flex';
+});
+
+qs('#cancel-upload-btn').addEventListener('click', () => {
+  qs('#upload-modal').style.display = 'none';
+});
+
+qs('#upload-modal').addEventListener('click', e => {
+  if (e.target === qs('#upload-modal')) qs('#upload-modal').style.display = 'none';
+});
+
+qs('#browse-link').addEventListener('click', () => qs('#file-input').click());
+qs('#drop-zone').addEventListener('click', () => qs('#file-input').click());
+
+qs('#file-input').addEventListener('change', e => {
+  if (e.target.files[0]) setFile(e.target.files[0]);
+});
+
+const dropZone = qs('#drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+});
+
+function setFile(f) {
+  selectedFile = f;
+  qs('#selected-file-name').textContent = `${f.name} (${(f.size/1024/1024).toFixed(1)} MB)`;
+  qs('#do-upload-btn').disabled = false;
+}
+
+qs('#do-upload-btn').addEventListener('click', async () => {
+  if (!selectedFile) return;
+  const wrap = qs('#upload-progress-wrap');
+  const fill = qs('#progress-fill');
+  const status = qs('#upload-status');
+
+  wrap.style.display = '';
+  fill.style.width = '5%';
+  status.textContent = 'Uploading…';
+  qs('#do-upload-btn').disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  xhr.upload.addEventListener('progress', e => {
+    if (e.lengthComputable) {
+      fill.style.width = Math.round(20 + (e.loaded / e.total) * 40) + '%';
+      status.textContent = `Uploading… ${Math.round(e.loaded/1024/1024)} / ${Math.round(e.total/1024/1024)} MB`;
+    }
+  });
+
+  xhr.addEventListener('load', async () => {
+    if (xhr.status === 201) {
+      fill.style.width = '80%';
+      status.textContent = 'Parsing objects…';
+      const data = JSON.parse(xhr.responseText);
+      fill.style.width = '100%';
+      status.textContent = `Done — ${data.object_count} objects imported.`;
+      state.selectedUploadId = data.id;
+      await loadUploads();
+      setTimeout(() => { qs('#upload-modal').style.display = 'none'; }, 1200);
+      showToast(`Imported ${data.object_count} objects from ${data.original_name}`);
+    } else {
+      status.textContent = 'Upload failed: ' + xhr.responseText;
+      fill.style.background = '#991b1b';
+      qs('#do-upload-btn').disabled = false;
+    }
+  });
+
+  xhr.addEventListener('error', () => {
+    status.textContent = 'Network error';
+    qs('#do-upload-btn').disabled = false;
+  });
+
+  xhr.send(fd);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Refresh everything
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function refreshAll() {
+  await Promise.all([loadStats(), loadClasses(), loadObjects()]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+
+loadUploads();
+</script>
+</body>
+</html>
