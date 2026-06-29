@@ -160,10 +160,11 @@ async function loadUploads() {
   const data = await api('/api/uploads');
   state.uploads = data;
   const sel = qs('#upload-select');
-  sel.innerHTML = '<option value="">— no log loaded —</option>' +
-    data.map(u =>
-      `<option value="${u.id}">${esc(u.original_name)} (${u.object_count} objects, ${u.uploaded_at.slice(0, 16)})</option>`
-    ).join('');
+  sel.innerHTML = '<option value="">— no dataset loaded —</option>' +
+    data.map(u => {
+      const fname = u.original_name.replace(/.*[\\/]/, '');
+      return `<option value="${u.id}">${esc(fname)} (${u.object_count} objects, ${u.uploaded_at.slice(0, 16)})</option>`;
+    }).join('');
   if (data.length > 0 && !state.selectedUploadId) {
     state.selectedUploadId = data[0].id;
     sel.value = data[0].id;
