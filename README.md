@@ -7,7 +7,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 
 ## Features
 
-- **Upload & parse** bofhound `.log` files and SysInternals ADExplorer `.adsnapshot` files (drag-and-drop or file picker); snapshots are converted automatically via [ADExplorerSnapshot](https://github.com/c3c/ADExplorerSnapshot)
+- **Upload & parse** bofhound `.log` files and SysInternals ADExplorer `.dat` snapshot files (drag-and-drop or file picker); snapshots are converted automatically via [ADExplorerSnapshot](https://github.com/c3c/ADExplorerSnapshot)
 - **SQLite storage** — logs are persisted between sessions; switch between multiple uploads
 - **Object table** with sortable columns: name / SAM account, object type, account status, description, last logon, password age, last changed
   - Click any column header to sort ascending / descending; active column is highlighted with a ↑ / ↓ indicator

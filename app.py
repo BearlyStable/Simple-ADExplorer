@@ -306,7 +306,7 @@ def api_upload():
 
     converted_log = None
     try:
-        if orig.lower().endswith(".adsnapshot"):
+        if orig.lower().endswith(".dat"):
             converted_log = convert_adsnapshot(str(dest))
             log_path = converted_log
         else:
