@@ -224,4 +224,3 @@ Simple-ADExplorer/
 
 
 ## TODO
-- add the possibility to make comments to each object.

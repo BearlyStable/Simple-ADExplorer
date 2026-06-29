@@ -618,6 +618,47 @@ function renderDetail(obj) {
   const detailContent = qs('#detail-content');
   detailContent.innerHTML = html || '<div style="color:#475569;padding:20px">No displayable fields.</div>';
   attachDNLinks(detailContent);
+
+  // ── Notes / comment box ───────────────────────────────────────────────────
+  const notesWrap = document.createElement('div');
+  notesWrap.className = 'comment-box';
+  notesWrap.innerHTML = `
+    <div class="comment-label">Notes</div>
+    <textarea id="comment-textarea" rows="4" placeholder="Add notes about this object…">${esc(obj.comment || '')}</textarea>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <button class="btn btn-ghost" id="comment-save-btn" style="padding:3px 12px">Save</button>
+      <span id="comment-status" class="comment-status"></span>
+    </div>`;
+  detailContent.appendChild(notesWrap);
+
+  const textarea = qs('#comment-textarea');
+  const saveBtn  = qs('#comment-save-btn');
+  const status   = qs('#comment-status');
+
+  async function saveComment() {
+    saveBtn.disabled = true;
+    status.textContent = 'Saving…';
+    try {
+      await api(`/api/objects/${obj.id}/comment`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: textarea.value }),
+      });
+      status.textContent = 'Saved';
+      setTimeout(() => { status.textContent = ''; }, 2000);
+    } catch {
+      status.style.color = '#f87171';
+      status.textContent = 'Save failed';
+      setTimeout(() => { status.textContent = ''; status.style.color = ''; }, 3000);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  }
+
+  saveBtn.addEventListener('click', saveComment);
+  textarea.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveComment();
+  });
 }
 
 function toggleLong(id) {

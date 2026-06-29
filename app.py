@@ -70,6 +70,9 @@ def init_db():
             -- integer flags
             user_account_control INTEGER,
             admin_count          INTEGER,
+            -- user annotations
+            is_favorite          INTEGER DEFAULT 0,
+            comment              TEXT,
             -- full object serialised as JSON
             fields_json          TEXT
         );
@@ -82,11 +85,6 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_obj_logon   ON objects(last_logon);
         CREATE INDEX IF NOT EXISTS idx_obj_logonts ON objects(last_logon_timestamp);
         """)
-        # Migration: add is_favorite for existing databases
-        try:
-            conn.execute("ALTER TABLE objects ADD COLUMN is_favorite INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
 
 
 init_db()
@@ -487,6 +485,17 @@ def api_by_dn():
     if not row:
         return jsonify(error="Not found"), 404
     return jsonify({"id": row["id"]})
+
+
+@app.route("/api/objects/<int:oid>/comment", methods=["PATCH"])
+def api_set_comment(oid):
+    body = request.get_json(silent=True) or {}
+    comment = str(body.get("comment", "")).strip() or None
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM objects WHERE id=?", (oid,)).fetchone():
+            return jsonify(error="Not found"), 404
+        conn.execute("UPDATE objects SET comment=? WHERE id=?", (comment, oid))
+    return jsonify({"comment": comment})
 
 
 @app.route("/api/objects/<int:oid>/favorite", methods=["PATCH"])
