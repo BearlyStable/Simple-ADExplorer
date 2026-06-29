@@ -24,6 +24,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
   - `userAccountControl` decoded to readable flag badges (Enabled / Disabled / Locked / No Pwd Expiry / …)
   - Long binary fields (e.g. `nTSecurityDescriptor`) collapsed by default with an expand toggle
   - **DN navigation** — any Distinguished Name value is a clickable link that opens the referenced object directly in the detail panel; a **← Back** button lets you retrace your path (e.g. open a group → click a `member` DN → navigate to that user)
+- **Favourites** — click the star (☆/★) on any row or in the detail panel header to mark objects; a dedicated sidebar toggle shows only favourited objects; favourite flags persist in the database across sessions
 - **Multiple log support** — upload logs from several DCs and switch between them via the top bar
 
 ---
@@ -192,6 +193,7 @@ Simple-ADExplorer/
 | `DELETE` | `/api/uploads/<id>` | Delete an upload and all its objects |
 | `GET` | `/api/objects` | List objects with optional filters and sorting (see below) |
 | `GET` | `/api/objects/<id>` | Full detail for one object |
+| `PATCH` | `/api/objects/<id>/favorite` | Toggle the favourite flag for one object |
 | `GET` | `/api/objects/by-dn` | Look up an object by exact Distinguished Name |
 | `GET` | `/api/classes` | Object-type counts for the filter sidebar |
 | `GET` | `/api/stats` | Summary counts (total, users, computers, groups) |
@@ -207,6 +209,7 @@ Simple-ADExplorer/
 | `pwd_changed_after` | ISO-8601 | Objects with `pwdLastSet` after this date |
 | `changed_after` | ISO-8601 | Objects with `whenChanged` after this date |
 | `admin_only` | `1` | Only objects with `adminCount=1` |
+| `favorites_only` | `1` | Only objects marked as favourite |
 | `sort_by` | string | Column to sort by: `cn`, `primary_class`, `description`, `user_account_control`, `last_logon`, `pwd_last_set`, `when_changed` (default: `when_changed`) |
 | `sort_dir` | `asc` / `desc` | Sort direction (default: `desc`); objects with no value always appear last |
 | `page` | int | Page number (default `1`) |
@@ -220,3 +223,5 @@ Simple-ADExplorer/
 | `upload_id` | int | Restrict the search to one upload (recommended) |
 
 
+## TODO
+- add the possibility to make comments to each object.

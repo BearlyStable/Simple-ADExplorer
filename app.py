@@ -82,6 +82,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_obj_logon   ON objects(last_logon);
         CREATE INDEX IF NOT EXISTS idx_obj_logonts ON objects(last_logon_timestamp);
         """)
+        # Migration: add is_favorite for existing databases
+        try:
+            conn.execute("ALTER TABLE objects ADD COLUMN is_favorite INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
 
 
 init_db()
@@ -370,6 +375,7 @@ def api_list_objects():
     changed_after      = p.get("changed_after",      "").strip()
     created_after      = p.get("created_after",      "").strip()
     admin_only         = p.get("admin_only",          "").lower() in ("1", "true")
+    favorites_only     = p.get("favorites_only",      "").lower() in ("1", "true")
     page               = max(1, p.get("page",     1,  type=int))
     per_page           = min(200, max(10, p.get("per_page", 50, type=int)))
 
@@ -413,6 +419,9 @@ def api_list_objects():
     if admin_only:
         where.append("admin_count = 1")
 
+    if favorites_only:
+        where.append("is_favorite = 1")
+
     # Sorting
     _SORT_EXPRS = {
         "cn":                   "LOWER(COALESCE(cn, ''))",
@@ -443,7 +452,7 @@ def api_list_objects():
                        cn, distinguished_name, sam_account_name, user_principal_name,
                        description, when_created, when_changed, pwd_last_set,
                        last_logon, last_logon_timestamp, bad_password_time,
-                       user_account_control, admin_count
+                       user_account_control, admin_count, is_favorite
                 FROM objects WHERE {sql_where}
                 ORDER BY {order_sql}
                 LIMIT ? OFFSET ?""",
@@ -478,6 +487,17 @@ def api_by_dn():
     if not row:
         return jsonify(error="Not found"), 404
     return jsonify({"id": row["id"]})
+
+
+@app.route("/api/objects/<int:oid>/favorite", methods=["PATCH"])
+def api_toggle_favorite(oid):
+    with get_db() as conn:
+        row = conn.execute("SELECT is_favorite FROM objects WHERE id=?", (oid,)).fetchone()
+        if not row:
+            return jsonify(error="Not found"), 404
+        new_val = 0 if row["is_favorite"] else 1
+        conn.execute("UPDATE objects SET is_favorite=? WHERE id=?", (new_val, oid))
+    return jsonify({"is_favorite": bool(new_val)})
 
 
 @app.route("/api/objects/<int:oid>")

@@ -131,6 +131,7 @@ const state = {
   changedDate: '',
   search: '',
   adminOnly: false,
+  favoritesOnly: false,
   page: 1,
   perPage: 50,
   total: 0,
@@ -146,8 +147,8 @@ const state = {
 // API
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function api(url) {
-  const r = await fetch(url);
+async function api(url, opts = {}) {
+  const r = await fetch(url, opts);
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -259,11 +260,32 @@ function buildQueryParams() {
   if (state.pwdDate)             p.set('pwd_changed_after', state.pwdDate + 'T00:00:00+00:00');
   if (state.changedDate)         p.set('changed_after',    state.changedDate + 'T00:00:00+00:00');
   if (state.adminOnly)           p.set('admin_only',       '1');
+  if (state.favoritesOnly)       p.set('favorites_only',   '1');
   p.set('sort_by',  state.sortBy);
   p.set('sort_dir', state.sortDir);
   p.set('page',     state.page);
   p.set('per_page', state.perPage);
   return p;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Favourites
+
+async function toggleFavorite(id) {
+  const result = await api(`/api/objects/${id}/favorite`, { method: 'PATCH' });
+  // Update every star in the table that belongs to this object
+  qsa(`.star-btn[data-id="${id}"]`).forEach(btn => {
+    btn.textContent = result.is_favorite ? '★' : '☆';
+    btn.classList.toggle('active', result.is_favorite);
+  });
+  // Update the detail-panel star if it's showing the same object
+  const detailStar = qs('#detail-fav-btn');
+  if (detailStar && String(state.selectedObjectId) === String(id)) {
+    detailStar.textContent = result.is_favorite ? '★' : '☆';
+    detailStar.classList.toggle('active', result.is_favorite);
+  }
+  if (state.favoritesOnly) loadObjects();
+  return result.is_favorite;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -317,7 +339,7 @@ async function loadObjects() {
 function renderObjects(objects) {
   const tbody = qs('#objects-tbody');
   if (!objects.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:#475569">No objects match the current filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#475569">No objects match the current filters.</td></tr>`;
     return;
   }
 
@@ -343,7 +365,11 @@ function renderObjects(objects) {
       ? `<span title="${esc(desc)}" style="color:#94a3b8">${esc(desc.length > 60 ? desc.slice(0, 58) + '…' : desc)}</span>`
       : `<span style="color:#334155">—</span>`;
 
+    const isFav = !!o.is_favorite;
     return `<tr class="row-hover" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
+      <td style="padding:4px 6px;width:28px;text-align:center">
+        <button class="star-btn${isFav ? ' active' : ''}" data-id="${o.id}" title="Toggle favourite">${isFav ? '★' : '☆'}</button>
+      </td>
       <td style="padding:7px 10px">${nameCell}</td>
       <td style="padding:7px 10px">${classBadge(o.primary_class)}</td>
       <td style="padding:7px 10px">${statusBadge(o.user_account_control, o.admin_count)}</td>
@@ -355,7 +381,17 @@ function renderObjects(objects) {
   }).join('');
 
   qsa('tr[data-id]', tbody).forEach(row => {
-    row.addEventListener('click', () => showDetail(parseInt(row.dataset.id)));
+    row.addEventListener('click', e => {
+      if (e.target.closest('.star-btn')) return;
+      showDetail(parseInt(row.dataset.id));
+    });
+  });
+
+  qsa('.star-btn', tbody).forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleFavorite(parseInt(btn.dataset.id));
+    });
   });
 }
 
@@ -502,6 +538,11 @@ function renderDetail(obj) {
   const title  = fields.cn || fields.name || obj.cn || 'Object';
   qs('#detail-title').textContent = title;
 
+  const detailStar = qs('#detail-fav-btn');
+  detailStar.textContent = obj.is_favorite ? '★' : '☆';
+  detailStar.classList.toggle('active', !!obj.is_favorite);
+  detailStar.onclick = () => toggleFavorite(obj.id);
+
   const seen = new Set();
   let html = '';
 
@@ -609,6 +650,12 @@ qs('#admin-only').addEventListener('change', e => {
   loadObjects();
 });
 
+qs('#favorites-only').addEventListener('change', e => {
+  state.favoritesOnly = e.target.checked;
+  state.page = 1;
+  loadObjects();
+});
+
 qs('#per-page-select').addEventListener('change', e => {
   state.perPage = parseInt(e.target.value);
   state.page = 1;
@@ -649,7 +696,8 @@ qs('#clear-filters-btn').addEventListener('click', () => {
   state.logonDate = '';    qs('#logon-date').value   = '';
   state.pwdDate = '';      qs('#pwd-date').value     = '';
   state.changedDate = '';  qs('#changed-date').value = '';
-  state.adminOnly = false; qs('#admin-only').checked = false;
+  state.adminOnly = false;    qs('#admin-only').checked    = false;
+  state.favoritesOnly = false; qs('#favorites-only').checked = false;
   state.selectedClassFilter = null;
   state.logonPreset = null; state.pwdPreset = null; state.changedPreset = null;
   qsa('.preset-btn').forEach(b => b.classList.remove('active'));

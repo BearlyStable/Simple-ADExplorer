@@ -124,6 +124,11 @@ thead th[data-sort]:hover { color: #93c5fd !important; }
   opacity: 0; transition: opacity 0.3s; pointer-events: none;
 }
 
+/* ── Favourite star ───────────────────────────────────────────────────────── */
+.star-btn        { background: none; border: none; cursor: pointer; font-size: 1rem; padding: 0 2px; color: #475569; line-height: 1; }
+.star-btn:hover  { color: #fbbf24; }
+.star-btn.active { color: #fbbf24; }
+
 /* ── DN navigation links ──────────────────────────────────────────────────── */
 .dn-link       { color: #60a5fa; text-decoration: none; cursor: pointer; }
 .dn-link:hover { text-decoration: underline; }
