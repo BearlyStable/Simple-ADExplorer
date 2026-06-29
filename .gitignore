@@ -19,3 +19,6 @@
 /adex_deps
 __pycache__/
 *.pyc
+
+# don't include the built tar.gz files
+/*simple-adexplorer-*.tar.gz

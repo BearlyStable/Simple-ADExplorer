@@ -43,6 +43,8 @@ run: .venv/pyvenv.cfg
 release:
 	docker build -t $(IMAGE):$(VERSION) .
 	@echo "Built $(IMAGE):$(VERSION)"
+	docker image save -o $(IMAGE)-$(VERSION).tar.gz $(IMAGE):$(VERSION)
+	@echo "Exported $(IMAGE)-$(VERSION).tar.gz"
 
 clean:
 	rm -rf .venv
