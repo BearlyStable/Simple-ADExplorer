@@ -224,3 +224,11 @@ Simple-ADExplorer/
 
 
 ## TODO
+- Export specific objects
+- export list of objects based on active filter
+- diff two files?
+  - Which object are new?
+  - Which object are gone?
+- use search-tags to find stuff
+  - maybe we want to add hidden sql-query-form ?
+- define snapshot creation date for backward search when uploading a file
