@@ -91,8 +91,22 @@ def init_db():
         if "snapshot_time" not in upload_cols:
             conn.execute("ALTER TABLE uploads ADD COLUMN snapshot_time TEXT")
 
-
-init_db()
+        # Backfill uploads made before snapshot-time detection existed, using
+        # the original file if it's still sitting in UPLOAD_DIR.
+        stale = conn.execute(
+            "SELECT id, original_name, stored_name FROM uploads WHERE snapshot_time IS NULL"
+        ).fetchall()
+        for row in stale:
+            dest = UPLOAD_DIR / row["stored_name"]
+            if not dest.exists():
+                continue
+            detected = detect_snapshot_time(
+                row["original_name"], dest, row["original_name"].lower().endswith(".dat")
+            )
+            if detected:
+                conn.execute(
+                    "UPDATE uploads SET snapshot_time=? WHERE id=?", (detected, row["id"])
+                )
 
 
 # ── Timestamp helpers ─────────────────────────────────────────────────────────
@@ -336,6 +350,9 @@ def convert_adsnapshot(snapshot_path: str) -> str:
         return out_path
     finally:
         shutil.rmtree(str(tmp_out), ignore_errors=True)
+
+
+init_db()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
