@@ -851,6 +851,55 @@ qs('#do-upload-btn').addEventListener('click', async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Export modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EXPORT_FIELDS = [
+  ['cn',                  'Name',                true],
+  ['sam_account_name',    'SAM Account Name',    true],
+  ['primary_class',       'Type',                true],
+  ['distinguished_name',  'Distinguished Name',  false],
+  ['user_principal_name', 'UPN',                 false],
+  ['description',         'Description',         false],
+  ['status',              'Status',              false],
+  ['last_logon',          'Last Logon',          false],
+  ['pwd_last_set',        'Pwd Changed',         false],
+  ['when_changed',        'Changed',             false],
+  ['when_created',        'Created',             false],
+  ['comment',             'Notes',               false],
+];
+
+qs('#export-btn').addEventListener('click', () => {
+  qs('#export-fields').innerHTML = EXPORT_FIELDS.map(([key, label, def]) => `
+    <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:0.82rem;color:#94a3b8">
+      <input type="checkbox" class="export-field-cb" value="${key}" ${def ? 'checked' : ''} style="width:auto;accent-color:#3b82f6"> ${esc(label)}
+    </label>`).join('');
+  qs('#export-modal').style.display = 'flex';
+});
+
+qs('#cancel-export-btn').addEventListener('click', () => {
+  qs('#export-modal').style.display = 'none';
+});
+
+qs('#export-modal').addEventListener('click', e => {
+  if (e.target === qs('#export-modal')) qs('#export-modal').style.display = 'none';
+});
+
+qs('#do-export-btn').addEventListener('click', () => {
+  const fields = Array.from(qsa('.export-field-cb:checked', qs('#export-fields'))).map(cb => cb.value);
+  if (!fields.length) {
+    showToast('Select at least one field', 'err');
+    return;
+  }
+  const params = buildQueryParams();
+  params.delete('page');
+  params.delete('per_page');
+  params.set('fields', fields.join(','));
+  window.location.href = '/api/objects/export?' + params.toString();
+  qs('#export-modal').style.display = 'none';
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Init
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -224,8 +224,6 @@ Simple-ADExplorer/
 
 
 ## TODO
-- Export specific objects
-- export list of objects based on active filter
 - diff two files?
   - Which object are new?
   - Which object are gone?

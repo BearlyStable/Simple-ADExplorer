@@ -10,7 +10,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Response
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).parent
@@ -362,9 +362,22 @@ def api_delete_upload(uid):
     return jsonify(ok=True)
 
 
-@app.route("/api/objects")
-def api_list_objects():
-    p = request.args
+_SORT_EXPRS = {
+    "cn":                   "LOWER(COALESCE(cn, ''))",
+    "primary_class":        "LOWER(COALESCE(primary_class, ''))",
+    "user_account_control": "user_account_control",
+    "description":          "LOWER(COALESCE(description, ''))",
+    "last_logon":           "MAX(COALESCE(last_logon, ''), COALESCE(last_logon_timestamp, ''))",
+    "pwd_last_set":         "pwd_last_set",
+    "when_changed":         "when_changed",
+}
+
+
+def build_object_filter(p):
+    """Turn the shared object-list query params into (where_sql, params, order_sql).
+
+    Shared by /api/objects and /api/objects/export so the two never drift apart.
+    """
     upload_id          = p.get("upload_id",          type=int)
     search             = p.get("search",             "").strip()
     object_class       = p.get("object_class",       "").strip()
@@ -374,8 +387,6 @@ def api_list_objects():
     created_after      = p.get("created_after",      "").strip()
     admin_only         = p.get("admin_only",          "").lower() in ("1", "true")
     favorites_only     = p.get("favorites_only",      "").lower() in ("1", "true")
-    page               = max(1, p.get("page",     1,  type=int))
-    per_page           = min(200, max(10, p.get("per_page", 50, type=int)))
 
     where, params = ["1=1"], []
 
@@ -420,16 +431,6 @@ def api_list_objects():
     if favorites_only:
         where.append("is_favorite = 1")
 
-    # Sorting
-    _SORT_EXPRS = {
-        "cn":                   "LOWER(COALESCE(cn, ''))",
-        "primary_class":        "LOWER(COALESCE(primary_class, ''))",
-        "user_account_control": "user_account_control",
-        "description":          "LOWER(COALESCE(description, ''))",
-        "last_logon":           "MAX(COALESCE(last_logon, ''), COALESCE(last_logon_timestamp, ''))",
-        "pwd_last_set":         "pwd_last_set",
-        "when_changed":         "when_changed",
-    }
     sort_by  = p.get("sort_by",  "when_changed")
     sort_dir = p.get("sort_dir", "desc").lower()
     if sort_dir not in ("asc", "desc"):
@@ -437,7 +438,16 @@ def api_list_objects():
     sort_expr = _SORT_EXPRS.get(sort_by, "when_changed")
     order_sql = f"{sort_expr} {sort_dir.upper()} NULLS LAST"
 
-    sql_where = " AND ".join(where)
+    return " AND ".join(where), params, order_sql
+
+
+@app.route("/api/objects")
+def api_list_objects():
+    p = request.args
+    page     = max(1, p.get("page", 1, type=int))
+    per_page = min(200, max(10, p.get("per_page", 50, type=int)))
+
+    sql_where, params, order_sql = build_object_filter(p)
     offset = (page - 1) * per_page
 
     with get_db() as conn:
@@ -463,6 +473,86 @@ def api_list_objects():
         "per_page": per_page,
         "objects":  [dict(r) for r in rows],
     })
+
+
+# ── Markdown export ──────────────────────────────────────────────────────────
+
+EXPORT_FIELDS = {
+    "cn":                  "Name",
+    "sam_account_name":    "SAM Account Name",
+    "primary_class":       "Type",
+    "distinguished_name":  "Distinguished Name",
+    "user_principal_name": "UPN",
+    "description":         "Description",
+    "status":              "Status",
+    "last_logon":          "Last Logon",
+    "pwd_last_set":        "Pwd Changed",
+    "when_changed":        "Changed",
+    "when_created":        "Created",
+    "comment":             "Notes",
+}
+
+
+def _export_field_value(row, field):
+    if field == "status":
+        uac = row["user_account_control"]
+        if uac is None:
+            return "—"
+        status = "Disabled" if uac & 0x0002 else "Locked" if uac & 0x0010 else "Enabled"
+        if row["admin_count"] == 1:
+            status += ", Admin"
+        return status
+    if field == "last_logon":
+        return max(row["last_logon"] or "", row["last_logon_timestamp"] or "") or "—"
+    val = row[field]
+    return str(val) if val not in (None, "") else "—"
+
+
+def _md_escape(s):
+    return s.replace("|", "\\|").replace("\n", " ").strip()
+
+
+@app.route("/api/objects/export")
+def api_export_objects():
+    p = request.args
+    sql_where, params, order_sql = build_object_filter(p)
+
+    fields = [f for f in p.get("fields", "").split(",") if f in EXPORT_FIELDS]
+    if not fields:
+        return jsonify(error="No valid fields selected"), 400
+
+    needed_cols = {"id"}
+    for f in fields:
+        if f == "status":
+            needed_cols.update(["user_account_control", "admin_count"])
+        elif f == "last_logon":
+            needed_cols.update(["last_logon", "last_logon_timestamp"])
+        else:
+            needed_cols.add(f)
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT {', '.join(sorted(needed_cols))} FROM objects "
+            f"WHERE {sql_where} ORDER BY {order_sql}",
+            params,
+        ).fetchall()
+
+    headers = [EXPORT_FIELDS[f] for f in fields]
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        lines.append(
+            "| " + " | ".join(_md_escape(_export_field_value(row, f)) for f in fields) + " |"
+        )
+
+    filename = f"adexplorer-export-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.md"
+    return Response(
+        "\n".join(lines) + "\n",
+        mimetype="text/markdown",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.route("/api/objects/by-dn")
