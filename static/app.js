@@ -153,7 +153,7 @@ const state = {
   pwdPreset: null,
   createdPreset: null,
   changedPreset: null,
-  sortBy: 'when_created',
+  sortBy: '',
   sortDir: 'desc',
 };
 
@@ -290,8 +290,10 @@ function buildQueryParams() {
   if (state.changedDate)         p.set('changed_after',    state.changedDate + 'T00:00:00+00:00');
   if (state.adminOnly)           p.set('admin_only',       '1');
   if (state.favoritesOnly)       p.set('favorites_only',   '1');
-  p.set('sort_by',  state.sortBy);
-  p.set('sort_dir', state.sortDir);
+  if (state.sortBy) {
+    p.set('sort_by',  state.sortBy);
+    p.set('sort_dir', state.sortDir);
+  }
   p.set('page',     state.page);
   p.set('per_page', state.perPage);
   return p;

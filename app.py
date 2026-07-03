@@ -529,12 +529,14 @@ def build_object_filter(p):
     if favorites_only:
         where.append("is_favorite = 1")
 
-    sort_by  = p.get("sort_by",  "when_created")
+    sort_by  = p.get("sort_by",  "").strip()
     sort_dir = p.get("sort_dir", "desc").lower()
     if sort_dir not in ("asc", "desc"):
         sort_dir = "desc"
-    sort_expr = _SORT_EXPRS.get(sort_by, "when_created")
-    order_sql = f"{sort_expr} {sort_dir.upper()} NULLS LAST"
+    if sort_by and sort_by in _SORT_EXPRS:
+        order_sql = f"{_SORT_EXPRS[sort_by]} {sort_dir.upper()} NULLS LAST"
+    else:
+        order_sql = "id ASC"
 
     return " AND ".join(where), params, order_sql
 
