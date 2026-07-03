@@ -450,7 +450,7 @@ def api_list_objects():
                        cn, distinguished_name, sam_account_name, user_principal_name,
                        description, when_created, when_changed, pwd_last_set,
                        last_logon, last_logon_timestamp, bad_password_time,
-                       user_account_control, admin_count, is_favorite
+                       user_account_control, admin_count, is_favorite, comment
                 FROM objects WHERE {sql_where}
                 ORDER BY {order_sql}
                 LIMIT ? OFFSET ?""",

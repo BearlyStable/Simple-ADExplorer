@@ -324,7 +324,7 @@ function updateSortHeaders() {
 
 async function loadObjects() {
   const tbody = qs('#objects-tbody');
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#475569">Loading…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:24px;color:#475569">Loading…</td></tr>`;
 
   const data = await api('/api/objects?' + buildQueryParams());
   state.total = data.total;
@@ -336,10 +336,16 @@ async function loadObjects() {
     : 'No results';
 }
 
+function noteCellHtml(note) {
+  return note
+    ? `<span title="${esc(note)}" style="color:#94a3b8">${esc(note.length > 60 ? note.slice(0, 58) + '…' : note)}</span>`
+    : `<span style="color:#334155">—</span>`;
+}
+
 function renderObjects(objects) {
   const tbody = qs('#objects-tbody');
   if (!objects.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#475569">No objects match the current filters.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#475569">No objects match the current filters.</td></tr>`;
     return;
   }
 
@@ -365,6 +371,8 @@ function renderObjects(objects) {
       ? `<span title="${esc(desc)}" style="color:#94a3b8">${esc(desc.length > 60 ? desc.slice(0, 58) + '…' : desc)}</span>`
       : `<span style="color:#334155">—</span>`;
 
+    const noteCell = noteCellHtml(o.comment || '');
+
     const isFav = !!o.is_favorite;
     return `<tr class="row-hover" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
       <td style="padding:4px 6px;width:28px;text-align:center">
@@ -377,6 +385,7 @@ function renderObjects(objects) {
       <td style="padding:7px 10px;color:#94a3b8">${logonCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${pwdCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${changedCell}</td>
+      <td style="padding:7px 10px">${noteCell}</td>
     </tr>`;
   }).join('');
 
@@ -639,11 +648,14 @@ function renderDetail(obj) {
     saveBtn.disabled = true;
     status.textContent = 'Saving…';
     try {
-      await api(`/api/objects/${obj.id}/comment`, {
+      const result = await api(`/api/objects/${obj.id}/comment`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ comment: textarea.value }),
       });
+      obj.comment = result.comment;
+      const row = qs(`tr[data-id="${obj.id}"]`);
+      if (row) row.querySelector('td:last-child').innerHTML = noteCellHtml(result.comment || '');
       status.textContent = 'Saved';
       setTimeout(() => { status.textContent = ''; }, 2000);
     } catch {
