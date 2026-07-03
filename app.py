@@ -193,8 +193,9 @@ def parse_utc_datetime(raw: str) -> str | None:
 
 # ── Log parser ────────────────────────────────────────────────────────────────
 
-_FIELD_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_\-\.]*)\s*:\s*(.*)")
-_SEP_RE = re.compile(r"^-{4,}\s*$")
+_FIELD_RE    = re.compile(r"^([A-Za-z][A-Za-z0-9_\-\.]*)\s*:\s*(.*)")
+_SEP_RE      = re.compile(r"^-{4,}\s*$")
+_MULTI_DN_RE = re.compile(r",\s+(?=(?:CN|OU|DC|O|L|C|UID)=)", re.IGNORECASE)
 
 
 def _parse_block(lines: list[str]) -> dict | None:
@@ -205,14 +206,27 @@ def _parse_block(lines: list[str]) -> dict | None:
     def _flush():
         if key is None:
             return
-        v = " ".join(val_parts).strip()
+        raw = " ".join(val_parts).strip()
+        # Split "DN1, DN2, DN3" single-line multi-value fields into a list.
+        # Intra-DN commas never have a trailing space; inter-DN separators do.
+        if re.match(r"^(?:CN|OU|DC|O|L|C|UID)=", raw, re.IGNORECASE):
+            parts = _MULTI_DN_RE.split(raw)
+            v: str | list = parts if len(parts) > 1 else raw
+        else:
+            v = raw
         existing = fields.get(key)
         if existing is None:
             fields[key] = v
         elif isinstance(existing, list):
-            existing.append(v)
+            if isinstance(v, list):
+                existing.extend(v)
+            else:
+                existing.append(v)
         else:
-            fields[key] = [existing, v]
+            if isinstance(v, list):
+                fields[key] = [existing] + v
+            else:
+                fields[key] = [existing, v]
 
     for line in lines:
         if not line.strip():
