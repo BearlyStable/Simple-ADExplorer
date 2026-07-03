@@ -154,6 +154,58 @@ thead th[data-sort]:hover { color: #93c5fd !important; }
 .star-btn:hover  { color: #fbbf24; }
 .star-btn.active { color: #fbbf24; }
 
+/* ── Tags ─────────────────────────────────────────────────────────────────── */
+.tag-box {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #1e293b;
+}
+.tag-label {
+  color: #3b82f6;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #1e293b;
+}
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+  min-height: 4px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 9999px;
+  padding: 2px 6px 2px 10px;
+  font-size: 0.72rem;
+  color: #93c5fd;
+}
+.tag-remove-btn {
+  background: none;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+.tag-remove-btn:hover { color: #f87171; }
+.tag-input-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tag-hash { color: #60a5fa; font-weight: 700; font-size: 0.85rem; }
+#detail-tag-input { flex: 1; }
+
 /* ── Search operator help ─────────────────────────────────────────────────── */
 .search-help { margin-top: 6px; }
 .search-help summary {

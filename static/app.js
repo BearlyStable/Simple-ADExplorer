@@ -588,7 +588,7 @@ function renderDetail(obj) {
 
   if (fields.userAccountControl !== undefined) {
     const uac = parseInt(fields.userAccountControl) || 0;
-    html += `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:14px">
+    html += `<div id="detail-uac-block" style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:10px 14px;margin-bottom:14px">
       <div style="color:#64748b;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Account Status</div>
       <div>${uacBadges(uac)}</div>
     </div>`;
@@ -702,6 +702,65 @@ function renderDetail(obj) {
   textarea.addEventListener('keydown', e => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveComment();
   });
+
+  // ── Tags ──────────────────────────────────────────────────────────────────
+  const tagsWrap = document.createElement('div');
+  tagsWrap.className = 'tag-box';
+  tagsWrap.innerHTML = `
+    <div class="tag-label">Tags</div>
+    <div class="tag-chips" id="detail-tag-chips"></div>
+    <div class="tag-input-row">
+      <span class="tag-hash">#</span>
+      <input type="text" id="detail-tag-input" placeholder="add tag, press Enter">
+    </div>`;
+  const uacBlock = qs('#detail-uac-block');
+  if (uacBlock) {
+    uacBlock.insertAdjacentElement('afterend', tagsWrap);
+  } else {
+    detailContent.insertBefore(tagsWrap, detailContent.firstChild);
+  }
+
+  let objTags = Array.isArray(obj.tags) ? [...obj.tags] : [];
+
+  function renderTagChips() {
+    const chips = qs('#detail-tag-chips');
+    chips.innerHTML = objTags.map(t =>
+      `<span class="tag-chip" data-tag="${esc(t)}">` +
+      `<span class="tag-chip-text">#${esc(t)}</span>` +
+      `<button class="tag-remove-btn" title="Remove">×</button></span>`
+    ).join('');
+    chips.querySelectorAll('.tag-remove-btn').forEach(btn => {
+      btn.onclick = async () => {
+        const tag = btn.closest('.tag-chip').dataset.tag;
+        objTags = objTags.filter(t => t !== tag);
+        await persistTags();
+        renderTagChips();
+      };
+    });
+  }
+
+  async function persistTags() {
+    const result = await api(`/api/objects/${obj.id}/tags`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: objTags }),
+    });
+    obj.tags = result.tags;
+  }
+
+  const tagInput = qs('#detail-tag-input');
+  tagInput.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const raw = tagInput.value.trim().replace(/^#+/, '');
+    if (!raw || objTags.includes(raw)) { tagInput.value = ''; return; }
+    objTags.push(raw);
+    tagInput.value = '';
+    await persistTags();
+    renderTagChips();
+  });
+
+  renderTagChips();
 }
 
 function toggleLong(id) {

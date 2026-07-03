@@ -75,6 +75,7 @@ def init_db():
             -- user annotations
             is_favorite          INTEGER DEFAULT 0,
             comment              TEXT,
+            tags                 TEXT,
             -- full object serialised as JSON
             fields_json          TEXT
         );
@@ -91,6 +92,10 @@ def init_db():
         upload_cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploads)")}
         if "snapshot_time" not in upload_cols:
             conn.execute("ALTER TABLE uploads ADD COLUMN snapshot_time TEXT")
+
+        obj_cols = {row["name"] for row in conn.execute("PRAGMA table_info(objects)")}
+        if "tags" not in obj_cols:
+            conn.execute("ALTER TABLE objects ADD COLUMN tags TEXT")
 
         # Backfill uploads made before snapshot-time detection existed, using
         # the original file if it's still sitting in UPLOAD_DIR.
@@ -578,6 +583,14 @@ def parse_search_query(search_str: str, now: datetime):
             else:
                 conditions.append("(comment IS NULL OR comment = '')")
 
+        elif op == 'tag':
+            pat = f'%"{value.replace("*", "%")}"%'
+            if negate:
+                conditions.append("(tags IS NULL OR tags NOT LIKE ?)")
+            else:
+                conditions.append("(tags IS NOT NULL AND tags LIKE ?)")
+            params.append(pat)
+
         elif op in _OP_DATE:
             cond, p = _date_condition(_OP_DATE[op], value, negate, now)
             if cond:
@@ -698,7 +711,7 @@ def api_list_objects():
                        cn, distinguished_name, sam_account_name, user_principal_name,
                        description, when_created, when_changed, pwd_last_set,
                        last_logon, last_logon_timestamp, bad_password_time,
-                       user_account_control, admin_count, is_favorite, comment
+                       user_account_control, admin_count, is_favorite, comment, tags
                 FROM objects WHERE {sql_where}
                 ORDER BY {order_sql}
                 LIMIT ? OFFSET ?""",
@@ -709,7 +722,7 @@ def api_list_objects():
         "total":    total,
         "page":     page,
         "per_page": per_page,
-        "objects":  [dict(r) for r in rows],
+        "objects":  [{**dict(r), "tags": json.loads(r["tags"] or "[]")} for r in rows],
     })
 
 
@@ -826,6 +839,23 @@ def api_set_comment(oid):
     return jsonify({"comment": comment})
 
 
+@app.route("/api/objects/<int:oid>/tags", methods=["PATCH"])
+def api_set_tags(oid):
+    body = request.get_json(silent=True) or {}
+    raw = body.get("tags", [])
+    if not isinstance(raw, list):
+        return jsonify(error="tags must be an array"), 400
+    cleaned = list(dict.fromkeys(
+        t.strip().lstrip('#') for t in raw if isinstance(t, str) and t.strip()
+    ))
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM objects WHERE id=?", (oid,)).fetchone():
+            return jsonify(error="Not found"), 404
+        conn.execute("UPDATE objects SET tags=? WHERE id=?",
+                     (json.dumps(cleaned) if cleaned else None, oid))
+    return jsonify({"tags": cleaned})
+
+
 @app.route("/api/objects/<int:oid>/favorite", methods=["PATCH"])
 def api_toggle_favorite(oid):
     with get_db() as conn:
@@ -847,6 +877,7 @@ def api_get_object(oid):
         return jsonify(error="Not found"), 404
     d = dict(row)
     d["fields"] = json.loads(d.pop("fields_json", "{}"))
+    d["tags"] = json.loads(d.get("tags") or "[]")
     return jsonify(d)
 
 

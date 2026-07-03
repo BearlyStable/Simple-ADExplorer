@@ -239,6 +239,7 @@ The search bar accepts plain text (searches CN, SAM, DN, description and all raw
 | `locked:yes/no` | UAC locked-out flag | `locked:yes` |
 | `fav:yes/no` | Favourited objects | `fav:yes` |
 | `notes:yes/no` | Objects that have a note | `notes:yes`, `-notes:yes` |
+| `tag:value` | Objects carrying a specific tag | `tag:group1`, `tag:web*`, `-tag:legacy` |
 | `logon:` | Last logon date | `logon:>90d`, `logon:<30d`, `logon:never` |
 | `pwd:` | Password last set | `pwd:>365d`, `pwd:>1y`, `pwd:never` |
 | `created:` | whenCreated | `created:>1y`, `created:<30d` |
