@@ -17,14 +17,20 @@ Upload a `.log` file collected from a domain environment, then search, filter an
   - Last logon — preset buttons (30 d / 90 d / 6 m / 1 y) or custom date
   - Password last set — same presets / custom date
   - Object last changed — same presets / custom date
+  - Object created — same presets / custom date
   - Admin accounts only toggle
+  - Favourites-only toggle
   - Full-text search across all fields with optional search operators (see [Search operators](#search-operators))
 - **Detail panel** — click any row to see every attribute grouped by category, with:
   - Timestamps decoded from Windows FILETIME and LDAP Generalized Time to human-readable dates + relative age
   - `userAccountControl` decoded to readable flag badges (Enabled / Disabled / Locked / No Pwd Expiry / …)
   - Long binary fields (e.g. `nTSecurityDescriptor`) collapsed by default with an expand toggle
   - **DN navigation** — any Distinguished Name value is a clickable link that opens the referenced object directly in the detail panel; a **← Back** button lets you retrace your path (e.g. open a group → click a `member` DN → navigate to that user)
+  - **Tags** — attach arbitrary `#tag` labels to any object; tags persist in the database and are searchable with the `tag:` operator
+  - **Notes** — free-text notes field per object; persists in the database; searchable with `notes:yes`
 - **Favourites** — click the star (☆/★) on any row or in the detail panel header to mark objects; a dedicated sidebar toggle shows only favourited objects; favourite flags persist in the database across sessions
+- **Export** — export the current filtered view as a Markdown table; choose which columns to include via a modal
+- **Snapshot time** — each upload records its collection time (auto-detected from the file or set manually via the clock button in the top bar); all relative-age displays ("3 months ago") use this as the reference point instead of wall-clock time
 - **Multiple log support** — upload logs from several DCs and switch between them via the top bar
 
 ---
@@ -194,7 +200,11 @@ Simple-ADExplorer/
 | `GET` | `/api/objects` | List objects with optional filters and sorting (see below) |
 | `GET` | `/api/objects/<id>` | Full detail for one object |
 | `PATCH` | `/api/objects/<id>/favorite` | Toggle the favourite flag for one object |
+| `PATCH` | `/api/objects/<id>/comment` | Set or clear the notes text for one object |
+| `PATCH` | `/api/objects/<id>/tags` | Replace the tag list for one object (`{"tags": [...]}`) |
 | `GET` | `/api/objects/by-dn` | Look up an object by exact Distinguished Name |
+| `GET` | `/api/objects/export` | Download the current filtered view as a Markdown table |
+| `PATCH` | `/api/uploads/<id>/snapshot_time` | Override the snapshot time for an upload |
 | `GET` | `/api/classes` | Object-type counts for the filter sidebar |
 | `GET` | `/api/stats` | Summary counts (total, users, computers, groups) |
 
@@ -210,7 +220,7 @@ Simple-ADExplorer/
 | `changed_after` | ISO-8601 | Objects with `whenChanged` after this date |
 | `admin_only` | `1` | Only objects with `adminCount=1` |
 | `favorites_only` | `1` | Only objects marked as favourite |
-| `sort_by` | string | Column to sort by: `cn`, `primary_class`, `description`, `user_account_control`, `last_logon`, `pwd_last_set`, `when_changed` (default: `when_changed`) |
+| `sort_by` | string | Column to sort by: `cn`, `primary_class`, `description`, `user_account_control`, `last_logon`, `pwd_last_set`, `when_changed`, `when_created`; omit for natural (parse) order |
 | `sort_dir` | `asc` / `desc` | Sort direction (default: `desc`); objects with no value always appear last |
 | `page` | int | Page number (default `1`) |
 | `per_page` | int | Results per page (default `50`, max `200`) |
@@ -280,8 +290,4 @@ type:group dn:*Admin*
 ---
 
 ## TODO
-- diff two files?
-  - Which object are new?
-  - Which object are gone?
-- use search-tags to find stuff
-  - maybe we want to add hidden sql-query-form ?
+- Diff two uploads — which objects are new / gone between two snapshots?
