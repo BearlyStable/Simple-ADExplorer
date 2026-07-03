@@ -7,6 +7,7 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import shlex
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -473,6 +474,132 @@ def api_delete_upload(uid):
     return jsonify(ok=True)
 
 
+# ── Search query parser ───────────────────────────────────────────────────────
+
+_SEARCH_TOKEN_RE  = re.compile(r'^(-?)([A-Za-z_]+):(.+)$')
+_RELATIVE_DATE_RE = re.compile(r'^([<>])(\d+)(d|m|y)$', re.IGNORECASE)
+_ABS_DATE_RE      = re.compile(r'^([<>])(\d{4}-\d{2}-\d{2}.*)$')
+
+_OP_STRING = {
+    'type': 'primary_class', 'class': 'primary_class',
+    'cn':   'cn',
+    'sam':  'sam_account_name',
+    'dn':   'distinguished_name',
+    'desc': 'description',
+}
+
+_OP_DATE = {
+    'logon':   'LOGON',       # LOGON = MAX of last_logon / last_logon_timestamp
+    'nologon': 'LOGON',
+    'pwd':     'pwd_last_set',
+    'created': 'when_created',
+    'changed': 'when_changed',
+}
+
+
+def _date_condition(col: str, value: str, negate: bool, now: datetime):
+    is_logon = col == 'LOGON'
+    expr = "MAX(COALESCE(last_logon,''), COALESCE(last_logon_timestamp,''))" if is_logon else col
+
+    if value.lower() == 'never':
+        core = "(last_logon IS NULL AND last_logon_timestamp IS NULL)" if is_logon else f"({col} IS NULL)"
+        return (f"NOT {core}" if negate else core), []
+
+    m = _RELATIVE_DATE_RE.match(value)
+    if m:
+        direction = m.group(1)
+        amt, unit = int(m.group(2)), m.group(3).lower()
+        days = amt * (365 if unit == 'y' else 30 if unit == 'm' else 1)
+        cutoff = (now - timedelta(days=days)).isoformat()
+        # >Nd = "older than N days" → col < cutoff; <Nd = "newer than N days" → col >= cutoff
+        op_sql = ('>=' if negate else '<') if direction == '>' else ('<' if negate else '>=')
+        return f"({expr} IS NOT NULL AND {expr} {op_sql} ?)", [cutoff]
+
+    m = _ABS_DATE_RE.match(value)
+    if m:
+        direction, date_val = m.group(1), m.group(2)
+        op_sql = ('<=' if negate else '>') if direction == '>' else ('>' if negate else '<=')
+        return f"({expr} IS NOT NULL AND {expr} {op_sql} ?)", [date_val]
+
+    return None, []
+
+
+def parse_search_query(search_str: str, now: datetime):
+    """Parse a search string with optional operators into (conditions, params)."""
+    conditions, params, plain_terms = [], [], []
+
+    try:
+        tokens = shlex.split(search_str)
+    except ValueError:
+        tokens = search_str.split()
+
+    for token in tokens:
+        m = _SEARCH_TOKEN_RE.match(token)
+        if not m:
+            plain_terms.append(token)
+            continue
+
+        negate = m.group(1) == '-'
+        op     = m.group(2).lower()
+        value  = m.group(3)
+        NOT    = "NOT " if negate else ""
+
+        if op in _OP_STRING:
+            like = value.replace('*', '%')
+            conditions.append(f"LOWER({_OP_STRING[op]}) {NOT}LIKE LOWER(?)")
+            params.append(like)
+
+        elif op == 'admin':
+            yes = value.lower() in ('yes', 'true', '1', 'y')
+            if yes ^ negate:
+                conditions.append("admin_count = 1")
+            else:
+                conditions.append("(admin_count IS NULL OR admin_count != 1)")
+
+        elif op in ('disabled', 'locked'):
+            bit = 0x0002 if op == 'disabled' else 0x0010
+            yes = value.lower() in ('yes', 'true', '1', 'y')
+            if yes ^ negate:
+                conditions.append(f"(user_account_control & {bit}) != 0")
+            else:
+                conditions.append(f"(user_account_control IS NOT NULL AND (user_account_control & {bit}) = 0)")
+
+        elif op == 'fav':
+            yes = value.lower() in ('yes', 'true', '1', 'y')
+            if yes ^ negate:
+                conditions.append("is_favorite = 1")
+            else:
+                conditions.append("(is_favorite IS NULL OR is_favorite = 0)")
+
+        elif op == 'notes':
+            yes = value.lower() in ('yes', 'true', '1', 'y')
+            if yes ^ negate:
+                conditions.append("(comment IS NOT NULL AND comment != '')")
+            else:
+                conditions.append("(comment IS NULL OR comment = '')")
+
+        elif op in _OP_DATE:
+            cond, p = _date_condition(_OP_DATE[op], value, negate, now)
+            if cond:
+                conditions.append(cond)
+                params.extend(p)
+            else:
+                plain_terms.append(token)
+
+        else:
+            plain_terms.append(token)
+
+    for term in plain_terms:
+        like = '%' + term.replace('*', '%') + '%'
+        conditions.append(
+            "(fields_json LIKE ? OR cn LIKE ? OR sam_account_name LIKE ? "
+            "OR distinguished_name LIKE ? OR description LIKE ?)"
+        )
+        params.extend([like, like, like, like, like])
+
+    return conditions, params
+
+
 _SORT_EXPRS = {
     "cn":                   "LOWER(COALESCE(cn, ''))",
     "primary_class":        "LOWER(COALESCE(primary_class, ''))",
@@ -507,12 +634,9 @@ def build_object_filter(p):
         params.append(upload_id)
 
     if search:
-        like = f"%{search}%"
-        where.append(
-            "(fields_json LIKE ? OR cn LIKE ? OR sam_account_name LIKE ? "
-            "OR distinguished_name LIKE ? OR description LIKE ?)"
-        )
-        params.extend([like, like, like, like, like])
+        search_conds, search_params = parse_search_query(search, datetime.now(timezone.utc))
+        where.extend(search_conds)
+        params.extend(search_params)
 
     if object_class:
         where.append("primary_class = ?")

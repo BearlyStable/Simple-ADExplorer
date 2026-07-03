@@ -18,7 +18,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
   - Password last set — same presets / custom date
   - Object last changed — same presets / custom date
   - Admin accounts only toggle
-  - Full-text search across all fields
+  - Full-text search across all fields with optional search operators (see [Search operators](#search-operators))
 - **Detail panel** — click any row to see every attribute grouped by category, with:
   - Timestamps decoded from Windows FILETIME and LDAP Generalized Time to human-readable dates + relative age
   - `userAccountControl` decoded to readable flag badges (Enabled / Disabled / Locked / No Pwd Expiry / …)
@@ -222,6 +222,61 @@ Simple-ADExplorer/
 | `dn` | string | Exact Distinguished Name to look up |
 | `upload_id` | int | Restrict the search to one upload (recommended) |
 
+
+## Search operators
+
+The search bar accepts plain text (searches CN, SAM, DN, description and all raw fields) and structured `key:value` operators.  Multiple tokens are combined with **AND**.  Prefix any token with `-` to negate it.  The `*` character acts as a wildcard.
+
+| Operator | Description | Examples |
+|----------|-------------|---------|
+| `type:` / `class:` | Primary object class | `type:user`, `type:computer`, `class:group` |
+| `cn:` | Common name | `cn:admin*`, `cn:"John Smith"` |
+| `sam:` | SAM account name | `sam:svc_*` |
+| `dn:` | Distinguished name | `dn:*,OU=Admin*` |
+| `desc:` | Description field | `desc:*server*` |
+| `admin:yes/no` | adminCount = 1 | `admin:yes`, `-admin:yes` |
+| `disabled:yes/no` | UAC disabled flag | `disabled:yes` |
+| `locked:yes/no` | UAC locked-out flag | `locked:yes` |
+| `fav:yes/no` | Favourited objects | `fav:yes` |
+| `notes:yes/no` | Objects that have a note | `notes:yes`, `-notes:yes` |
+| `logon:` | Last logon date | `logon:>90d`, `logon:<30d`, `logon:never` |
+| `pwd:` | Password last set | `pwd:>365d`, `pwd:>1y`, `pwd:never` |
+| `created:` | whenCreated | `created:>1y`, `created:<30d` |
+| `changed:` | whenChanged | `changed:>90d`, `changed:<7d` |
+
+**Date value formats:**
+
+| Format | Meaning |
+|--------|---------|
+| `>Nd` / `>Nm` / `>Ny` | Older than N days / months / years |
+| `<Nd` / `<Nm` / `<Ny` | More recent than N days / months / years |
+| `>YYYY-MM-DD` | After an absolute date |
+| `<YYYY-MM-DD` | Before an absolute date |
+| `never` | Value is NULL / never set |
+
+**Examples:**
+
+```
+# All enabled admin users
+type:user admin:yes -disabled:yes
+
+# Service accounts that haven't logged on in 6 months
+cn:svc_* logon:>180d
+
+# Computers with stale passwords
+type:computer pwd:>1y
+
+# Users created in the last 30 days
+type:user created:<30d
+
+# Objects with "backup" anywhere in their fields
+backup
+
+# Groups whose DN contains "Admin"
+type:group dn:*Admin*
+```
+
+---
 
 ## TODO
 - diff two files?

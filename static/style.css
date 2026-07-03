@@ -154,6 +154,25 @@ thead th[data-sort]:hover { color: #93c5fd !important; }
 .star-btn:hover  { color: #fbbf24; }
 .star-btn.active { color: #fbbf24; }
 
+/* ── Search operator help ─────────────────────────────────────────────────── */
+.search-help { margin-top: 6px; }
+.search-help summary {
+  font-size: 0.7rem; color: #475569; cursor: pointer;
+  user-select: none; list-style: none; outline: none;
+}
+.search-help summary::-webkit-details-marker { display: none; }
+.search-help summary::before { content: '+ '; color: #3b82f6; }
+details[open].search-help summary::before { content: '− '; }
+.search-help-body {
+  margin-top: 6px; padding: 8px 10px;
+  background: #0a1221; border: 1px solid #1e293b; border-radius: 6px;
+}
+.search-help-body table { width: 100%; border-collapse: collapse; }
+.search-help-body td { padding: 2px 4px; font-size: 0.68rem; vertical-align: top; }
+.search-help-body td:first-child { color: #60a5fa; font-weight: 700; white-space: nowrap; width: 62px; }
+.search-help-body td:last-child  { color: #94a3b8; }
+.search-help-body code { color: #e2e8f0; background: #1e293b; border-radius: 3px; padding: 0 3px; }
+
 /* ── DN navigation links ──────────────────────────────────────────────────── */
 .dn-link       { color: #60a5fa; text-decoration: none; cursor: pointer; }
 .dn-link:hover { text-decoration: underline; }

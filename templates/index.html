@@ -43,7 +43,31 @@
       <!-- Search -->
       <div class="filter-section" style="padding-top:0">
         <div class="filter-label">Search</div>
-        <input type="text" id="search-input" placeholder="name, SAM, DN, value…">
+        <input type="text" id="search-input" placeholder="cn:admin* type:user -disabled:yes…">
+        <details class="search-help">
+          <summary>operator reference</summary>
+          <div class="search-help-body">
+            <table>
+              <tbody>
+                <tr><td>type:</td><td>object type — <code>user</code>, <code>computer</code>, <code>group</code>…</td></tr>
+                <tr><td>cn:</td><td>common name (supports <code>*</code> wildcard)</td></tr>
+                <tr><td>sam:</td><td>SAM account name</td></tr>
+                <tr><td>dn:</td><td>distinguished name</td></tr>
+                <tr><td>desc:</td><td>description</td></tr>
+                <tr><td>admin:</td><td><code>yes</code> / <code>no</code> — adminCount = 1</td></tr>
+                <tr><td>disabled:</td><td><code>yes</code> / <code>no</code></td></tr>
+                <tr><td>locked:</td><td><code>yes</code> / <code>no</code></td></tr>
+                <tr><td>fav:</td><td><code>yes</code> / <code>no</code></td></tr>
+                <tr><td>notes:</td><td><code>yes</code> / <code>no</code> — has a note</td></tr>
+                <tr><td>logon:</td><td><code>&gt;90d</code> · <code>&lt;30d</code> · <code>never</code></td></tr>
+                <tr><td>pwd:</td><td><code>&gt;365d</code> · <code>&gt;1y</code> · <code>never</code></td></tr>
+                <tr><td>created:</td><td><code>&gt;1y</code> · <code>&lt;30d</code></td></tr>
+                <tr><td>changed:</td><td><code>&gt;90d</code> · <code>&lt;7d</code></td></tr>
+              </tbody>
+            </table>
+            <div style="margin-top:5px; color:#475569; font-size:0.7rem;">Prefix any operator with <code>-</code> to negate · operators are combined with AND</div>
+          </div>
+        </details>
       </div>
 
       <!-- Object Type filter -->
