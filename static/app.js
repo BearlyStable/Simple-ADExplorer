@@ -140,6 +140,7 @@ const state = {
   selectedClassFilter: null,
   logonDate: '',
   pwdDate: '',
+  createdDate: '',
   changedDate: '',
   search: '',
   adminOnly: false,
@@ -150,8 +151,9 @@ const state = {
   selectedObjectId: null,
   logonPreset: null,
   pwdPreset: null,
+  createdPreset: null,
   changedPreset: null,
-  sortBy: 'when_changed',
+  sortBy: 'when_created',
   sortDir: 'desc',
 };
 
@@ -284,6 +286,7 @@ function buildQueryParams() {
   if (state.selectedClassFilter) p.set('object_class',     state.selectedClassFilter);
   if (state.logonDate)           p.set('last_logon_after', state.logonDate + 'T00:00:00+00:00');
   if (state.pwdDate)             p.set('pwd_changed_after', state.pwdDate + 'T00:00:00+00:00');
+  if (state.createdDate)         p.set('created_after',    state.createdDate + 'T00:00:00+00:00');
   if (state.changedDate)         p.set('changed_after',    state.changedDate + 'T00:00:00+00:00');
   if (state.adminOnly)           p.set('admin_only',       '1');
   if (state.favoritesOnly)       p.set('favorites_only',   '1');
@@ -324,7 +327,7 @@ function setSortColumn(col) {
   } else {
     state.sortBy  = col;
     // sensible defaults: dates descend (newest first), text ascends
-    const dateCols = new Set(['last_logon', 'pwd_last_set', 'when_changed']);
+    const dateCols = new Set(['last_logon', 'pwd_last_set', 'when_created']);
     state.sortDir = dateCols.has(col) ? 'desc' : 'asc';
   }
   state.page = 1;
@@ -390,7 +393,7 @@ function renderObjects(objects) {
 
     const logonCell   = bestLogon      ? `<span title="${fmtDate(bestLogon)}">${timeAgo(bestLogon)}</span>`          : `<span style="color:#334155">Never</span>`;
     const pwdCell     = o.pwd_last_set  ? `<span title="${fmtDate(o.pwd_last_set)}">${timeAgo(o.pwd_last_set)}</span>` : `<span style="color:#334155">—</span>`;
-    const changedCell = o.when_changed  ? `<span title="${fmtDate(o.when_changed)}">${timeAgo(o.when_changed)}</span>` : '—';
+    const createdCell = o.when_created  ? `<span title="${fmtDate(o.when_created)}">${timeAgo(o.when_created)}</span>` : '—';
 
     const desc = o.description || '';
     const descCell = desc
@@ -410,7 +413,7 @@ function renderObjects(objects) {
       <td style="padding:7px 10px">${descCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${logonCell}</td>
       <td style="padding:7px 10px;color:#94a3b8">${pwdCell}</td>
-      <td style="padding:7px 10px;color:#94a3b8">${changedCell}</td>
+      <td style="padding:7px 10px;color:#94a3b8">${createdCell}</td>
       <td style="padding:7px 10px">${noteCell}</td>
     </tr>`;
   }).join('');
@@ -768,17 +771,19 @@ function setupPresets(containerSel, inputSel, stateKey, presetKey) {
 
 setupPresets('#logon-presets',   '#logon-date',   'logonDate',   'logonPreset');
 setupPresets('#pwd-presets',     '#pwd-date',     'pwdDate',     'pwdPreset');
+setupPresets('#created-presets', '#created-date', 'createdDate', 'createdPreset');
 setupPresets('#changed-presets', '#changed-date', 'changedDate', 'changedPreset');
 
 qs('#clear-filters-btn').addEventListener('click', () => {
   state.search = '';       qs('#search-input').value = '';
   state.logonDate = '';    qs('#logon-date').value   = '';
   state.pwdDate = '';      qs('#pwd-date').value     = '';
+  state.createdDate = '';  qs('#created-date').value = '';
   state.changedDate = '';  qs('#changed-date').value = '';
   state.adminOnly = false;    qs('#admin-only').checked    = false;
   state.favoritesOnly = false; qs('#favorites-only').checked = false;
   state.selectedClassFilter = null;
-  state.logonPreset = null; state.pwdPreset = null; state.changedPreset = null;
+  state.logonPreset = null; state.pwdPreset = null; state.createdPreset = null; state.changedPreset = null;
   qsa('.preset-btn').forEach(b => b.classList.remove('active'));
   state.page = 1;
   loadClasses();

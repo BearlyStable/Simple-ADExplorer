@@ -78,6 +78,18 @@
         <input type="date" id="pwd-date" title="Password set after">
       </div>
 
+      <!-- Object Created filter -->
+      <div class="filter-section">
+        <div class="filter-label">Object Created</div>
+        <div class="flex flex-wrap gap-1 mb-2" id="created-presets">
+          <span class="preset-btn" data-days="30">30d</span>
+          <span class="preset-btn" data-days="90">90d</span>
+          <span class="preset-btn" data-days="180">6m</span>
+          <span class="preset-btn" data-days="365">1y</span>
+        </div>
+        <input type="date" id="created-date" title="Object created after">
+      </div>
+
       <!-- Object Changed filter -->
       <div class="filter-section">
         <div class="filter-label">Object Changed</div>
@@ -158,7 +170,7 @@
               <th data-sort="description"           style="padding:7px 10px;width:220px;border-bottom:1px solid #334155">Description<i class="sort-icon">↕</i></th>
               <th data-sort="last_logon"            style="padding:7px 10px;width:110px;border-bottom:1px solid #334155">Last Logon<i class="sort-icon">↕</i></th>
               <th data-sort="pwd_last_set"          style="padding:7px 10px;width:110px;border-bottom:1px solid #334155">Pwd Changed<i class="sort-icon">↕</i></th>
-              <th data-sort="when_changed"          style="padding:7px 10px;width:110px;border-bottom:1px solid #334155">Changed<i class="sort-icon">↕</i></th>
+              <th data-sort="when_created"          style="padding:7px 10px;width:110px;border-bottom:1px solid #334155">Created<i class="sort-icon">↕</i></th>
               <th                                    style="padding:7px 10px;border-bottom:1px solid #334155">Notes</th>
             </tr>
           </thead>
