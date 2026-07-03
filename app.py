@@ -45,7 +45,8 @@ def init_db():
             original_name TEXT    NOT NULL,
             stored_name   TEXT    NOT NULL,
             uploaded_at   TEXT    DEFAULT (datetime('now')),
-            object_count  INTEGER DEFAULT 0
+            object_count  INTEGER DEFAULT 0,
+            snapshot_time TEXT
         );
 
         CREATE TABLE IF NOT EXISTS objects (
@@ -86,6 +87,10 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_obj_logonts ON objects(last_logon_timestamp);
         """)
 
+        upload_cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploads)")}
+        if "snapshot_time" not in upload_cols:
+            conn.execute("ALTER TABLE uploads ADD COLUMN snapshot_time TEXT")
+
 
 init_db()
 
@@ -124,6 +129,52 @@ def gentime_to_dt(raw) -> str | None:
         return dt.isoformat()
     except ValueError:
         return None
+
+
+_BOFHOUND_LOG_RE = re.compile(r"_(\d{9,10})_bofhound\.log$", re.IGNORECASE)
+
+
+def detect_snapshot_time(orig_filename: str, dest_path: Path, is_dat: bool) -> str | None:
+    """Best-effort extraction of the snapshot/collection time (UTC) from the uploaded file.
+
+    - .dat (AD Explorer snapshot): the capture FILETIME is baked into the binary
+      header at a fixed offset (10-byte signature + 4-byte marker, then an 8-byte
+      FILETIME) — see c3c/ADExplorerSnapshot's Header struct.
+    - .log (bofhound output): ADExplorerSnapshot names its BOFHound export
+      "<server>_<filetimeUnix>_bofhound.log", embedding that same capture time
+      as a Unix epoch, so it survives even if only the .log is uploaded.
+    """
+    if is_dat:
+        try:
+            with open(dest_path, "rb") as fh:
+                header = fh.read(22)
+        except OSError:
+            return None
+        if len(header) < 22:
+            return None
+        return filetime_to_dt(int.from_bytes(header[14:22], "little"))
+
+    m = _BOFHOUND_LOG_RE.search(orig_filename)
+    if not m:
+        return None
+    try:
+        dt = datetime.fromtimestamp(int(m.group(1)), tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    if dt.year < 2000 or dt.year > 2100:
+        return None
+    return dt.isoformat()
+
+
+def parse_utc_datetime(raw: str) -> str | None:
+    """Parse a user-supplied datetime string, assuming UTC when no offset is given."""
+    try:
+        dt = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 
 # ── Log parser ────────────────────────────────────────────────────────────────
@@ -303,13 +354,25 @@ def api_upload():
         return jsonify(error="Empty filename"), 400
 
     orig = f.filename
+    is_dat = orig.lower().endswith(".dat")
+
+    user_snapshot_time = (request.form.get("snapshot_time") or "").strip()
+    snapshot_time = None
+    if user_snapshot_time:
+        snapshot_time = parse_utc_datetime(user_snapshot_time)
+        if snapshot_time is None:
+            return jsonify(error="Invalid snapshot_time"), 400
+
     stored = f"{uuid.uuid4().hex}_{secure_filename(orig)}"
     dest = UPLOAD_DIR / stored
     f.save(str(dest))
 
+    if snapshot_time is None:
+        snapshot_time = detect_snapshot_time(orig, dest, is_dat) or datetime.now(timezone.utc).isoformat()
+
     converted_log = None
     try:
-        if orig.lower().endswith(".dat"):
+        if is_dat:
             converted_log = convert_adsnapshot(str(dest))
             log_path = converted_log
         else:
@@ -324,8 +387,8 @@ def api_upload():
 
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO uploads (original_name, stored_name) VALUES (?,?)",
-            (orig, stored),
+            "INSERT INTO uploads (original_name, stored_name, snapshot_time) VALUES (?,?,?)",
+            (orig, stored, snapshot_time),
         )
         upload_id = cur.lastrowid
 
@@ -346,6 +409,23 @@ def api_list_uploads():
             "SELECT * FROM uploads ORDER BY uploaded_at DESC"
         ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/uploads/<int:uid>/snapshot_time", methods=["PATCH"])
+def api_set_snapshot_time(uid):
+    body = request.get_json(force=True, silent=True) or {}
+    raw = str(body.get("snapshot_time", "")).strip()
+    if not raw:
+        return jsonify(error="snapshot_time is required"), 400
+    snapshot_time = parse_utc_datetime(raw)
+    if snapshot_time is None:
+        return jsonify(error="Invalid snapshot_time"), 400
+
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM uploads WHERE id=?", (uid,)).fetchone():
+            return jsonify(error="Not found"), 404
+        conn.execute("UPDATE uploads SET snapshot_time=? WHERE id=?", (snapshot_time, uid))
+    return jsonify({"snapshot_time": snapshot_time})
 
 
 @app.route("/api/uploads/<int:uid>", methods=["DELETE"])

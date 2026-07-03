@@ -229,4 +229,3 @@ Simple-ADExplorer/
   - Which object are gone?
 - use search-tags to find stuff
   - maybe we want to add hidden sql-query-form ?
-- define snapshot creation date for backward search when uploading a file

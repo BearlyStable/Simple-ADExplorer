@@ -21,6 +21,9 @@
     <button class="btn btn-ghost" id="delete-upload-btn" title="Delete selected log" style="display:none">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
     </button>
+    <button class="btn btn-ghost" id="snapshot-time-btn" title="Snapshot time (UTC) — reference point for all relative time calculations. Click to edit." style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:5px;vertical-align:-2px"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg><span id="snapshot-time-label">—</span>
+    </button>
     <button class="btn btn-ghost" id="export-btn">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-right:5px;vertical-align:-2px"><path d="M21 9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10"/><polyline points="16 3 21 3 21 8"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Export
     </button>
@@ -192,6 +195,11 @@
       <p id="selected-file-name" style="color:#60a5fa;font-size:0.8rem;margin-top:6px"></p>
     </div>
     <input type="file" id="file-input" accept=".log,.txt,.dat" style="display:none">
+    <div style="margin-top:14px">
+      <label for="upload-snapshot-time" style="display:block;color:#94a3b8;font-size:0.78rem;margin-bottom:4px">Snapshot time (UTC)</label>
+      <input type="datetime-local" id="upload-snapshot-time" step="1">
+      <p style="color:#475569;font-size:0.72rem;margin-top:4px">Used as the reference point for all "time ago" values (last logon, password age, …). Auto-detected from the file when left blank.</p>
+    </div>
     <div id="upload-progress-wrap" style="display:none;margin-top:12px">
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <p id="upload-status" style="color:#94a3b8;font-size:0.78rem;margin-top:6px"></p>
@@ -199,6 +207,19 @@
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
       <button class="btn btn-ghost" id="cancel-upload-btn">Cancel</button>
       <button class="btn btn-primary" id="do-upload-btn" disabled>Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- SNAPSHOT TIME MODAL -->
+<div id="snapshot-modal" class="overlay" style="display:none">
+  <div class="modal" style="max-width:360px">
+    <h2 style="font-size:1.05rem;font-weight:700;color:#e2e8f0;margin-bottom:6px">Snapshot Time (UTC)</h2>
+    <p style="color:#64748b;font-size:0.78rem;margin-bottom:12px">Reference point for all "time ago" values in this dataset (last logon, password age, object changed, …).</p>
+    <input type="datetime-local" id="snapshot-time-input" step="1">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" id="cancel-snapshot-btn">Cancel</button>
+      <button class="btn btn-primary" id="save-snapshot-btn">Save</button>
     </div>
   </div>
 </div>

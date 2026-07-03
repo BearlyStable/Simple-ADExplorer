@@ -16,9 +16,13 @@ function showToast(msg, type = 'ok') {
   el._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
 }
 
+function referenceNow() {
+  return state.snapshotTime ? new Date(state.snapshotTime) : new Date();
+}
+
 function timeAgo(iso) {
   if (!iso) return '—';
-  const sec = (Date.now() - new Date(iso)) / 1000;
+  const sec = (referenceNow() - new Date(iso)) / 1000;
   if (sec < 0)          return new Date(iso).toLocaleDateString();
   if (sec < 3600)       return `${Math.round(sec / 60)}m ago`;
   if (sec < 86400)      return `${Math.round(sec / 3600)}h ago`;
@@ -32,8 +36,15 @@ function fmtDate(iso) {
   return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
 }
 
+// datetime-local inputs in this app always hold a wall-clock UTC value (no
+// timezone conversion — same convention as the existing date filter inputs).
+function isoToDatetimeLocal(iso) {
+  if (!iso) return '';
+  return new Date(iso).toISOString().slice(0, 19);
+}
+
 function daysAgoISO(days) {
-  const d = new Date();
+  const d = referenceNow();
   d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
@@ -125,6 +136,7 @@ function gentimeClient(raw) {
 const state = {
   uploads: [],
   selectedUploadId: null,
+  snapshotTime: null,
   selectedClassFilter: null,
   logonDate: '',
   pwdDate: '',
@@ -157,6 +169,18 @@ async function api(url, opts = {}) {
 // Uploads
 // ─────────────────────────────────────────────────────────────────────────────
 
+function syncSnapshotTime() {
+  const upload = state.uploads.find(u => u.id === state.selectedUploadId);
+  state.snapshotTime = upload?.snapshot_time || null;
+  const btn = qs('#snapshot-time-btn');
+  if (state.snapshotTime) {
+    qs('#snapshot-time-label').textContent = fmtDate(state.snapshotTime) + ' UTC';
+    btn.style.display = '';
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
 async function loadUploads() {
   const data = await api('/api/uploads');
   state.uploads = data;
@@ -173,6 +197,7 @@ async function loadUploads() {
     sel.value = state.selectedUploadId;
   }
   qs('#delete-upload-btn').style.display = data.length ? '' : 'none';
+  syncSnapshotTime();
   await refreshAll();
 }
 
@@ -181,6 +206,7 @@ qs('#upload-select').addEventListener('change', async e => {
   state.page = 1;
   state.selectedClassFilter = null;
   qs('#delete-upload-btn').style.display = state.selectedUploadId ? '' : 'none';
+  syncSnapshotTime();
   await refreshAll();
 });
 
@@ -771,6 +797,7 @@ qs('#upload-btn').addEventListener('click', () => {
   qs('#do-upload-btn').disabled = true;
   qs('#upload-progress-wrap').style.display = 'none';
   qs('#file-input').value = '';
+  qs('#upload-snapshot-time').value = '';
   qs('#upload-modal').style.display = 'flex';
 });
 
@@ -815,6 +842,8 @@ qs('#do-upload-btn').addEventListener('click', async () => {
 
   const fd = new FormData();
   fd.append('file', selectedFile);
+  const snapshotTimeInput = qs('#upload-snapshot-time').value;
+  if (snapshotTimeInput) fd.append('snapshot_time', snapshotTimeInput + 'Z');
 
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/upload');
@@ -830,10 +859,11 @@ qs('#do-upload-btn').addEventListener('click', async () => {
     if (xhr.status === 201) {
       fill.style.width = '100%';
       const data = JSON.parse(xhr.responseText);
-      status.textContent = `Done — ${data.object_count} objects imported.`;
+      const snapLabel = data.snapshot_time ? `${fmtDate(data.snapshot_time)} UTC` : 'unknown';
+      status.textContent = `Done — ${data.object_count} objects imported. Snapshot time: ${snapLabel}.`;
       state.selectedUploadId = data.id;
       await loadUploads();
-      setTimeout(() => { qs('#upload-modal').style.display = 'none'; }, 1200);
+      setTimeout(() => { qs('#upload-modal').style.display = 'none'; }, 1600);
       showToast(`Imported ${data.object_count} objects from ${data.original_name}`);
     } else {
       status.textContent = 'Upload failed: ' + xhr.responseText;
@@ -848,6 +878,45 @@ qs('#do-upload-btn').addEventListener('click', async () => {
   });
 
   xhr.send(fd);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Snapshot time modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+qs('#snapshot-time-btn').addEventListener('click', () => {
+  if (!state.selectedUploadId) return;
+  qs('#snapshot-time-input').value = isoToDatetimeLocal(state.snapshotTime);
+  qs('#snapshot-modal').style.display = 'flex';
+});
+
+qs('#cancel-snapshot-btn').addEventListener('click', () => {
+  qs('#snapshot-modal').style.display = 'none';
+});
+
+qs('#snapshot-modal').addEventListener('click', e => {
+  if (e.target === qs('#snapshot-modal')) qs('#snapshot-modal').style.display = 'none';
+});
+
+qs('#save-snapshot-btn').addEventListener('click', async () => {
+  const val = qs('#snapshot-time-input').value;
+  if (!val) { showToast('Enter a snapshot time', 'err'); return; }
+  try {
+    const result = await api(`/api/uploads/${state.selectedUploadId}/snapshot_time`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_time: val + 'Z' }),
+    });
+    const upload = state.uploads.find(u => u.id === state.selectedUploadId);
+    if (upload) upload.snapshot_time = result.snapshot_time;
+    syncSnapshotTime();
+    qs('#snapshot-modal').style.display = 'none';
+    showToast('Snapshot time updated');
+    await loadObjects();
+    if (state.selectedObjectId) await showDetail(state.selectedObjectId, false);
+  } catch {
+    showToast('Failed to update snapshot time', 'err');
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
