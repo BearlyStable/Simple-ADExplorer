@@ -232,10 +232,14 @@ async function loadStats() {
     ? `/api/stats?upload_id=${state.selectedUploadId}`
     : '/api/stats';
   const s = await api(url);
-  qs('#stat-total').textContent     = s.total;
-  qs('#stat-users').textContent     = s.users;
-  qs('#stat-computers').textContent = s.computers;
-  qs('#stat-groups').textContent    = s.groups;
+  function fmtStat(count, missing) {
+    if (!missing) return String(count);
+    return `${count} <span style="color:#f87171;font-size:0.85em">+${missing}</span>`;
+  }
+  qs('#stat-total').innerHTML     = fmtStat(s.total,     s.total_missing);
+  qs('#stat-users').innerHTML     = fmtStat(s.users,     s.users_missing);
+  qs('#stat-computers').innerHTML = fmtStat(s.computers, s.computers_missing);
+  qs('#stat-groups').innerHTML    = fmtStat(s.groups,    s.groups_missing);
 }
 
 async function loadClasses() {
@@ -405,7 +409,9 @@ function renderObjects(objects) {
     const noteCell = noteCellHtml(o.comment || '');
 
     const isFav = !!o.is_favorite;
-    return `<tr class="row-hover" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
+    const tags = Array.isArray(o.tags) ? o.tags : [];
+    const diffClass = tags.includes('missing') ? ' row-missing' : tags.includes('new') ? ' row-new' : '';
+    return `<tr class="row-hover${diffClass}" data-id="${o.id}" style="border-bottom:1px solid #1e293b;${bg}">
       <td style="padding:4px 6px;width:28px;text-align:center">
         <button class="star-btn${isFav ? ' active' : ''}" data-id="${o.id}" title="Toggle favourite">${isFav ? '★' : '☆'}</button>
       </td>
@@ -864,6 +870,17 @@ qs('#upload-btn').addEventListener('click', () => {
   qs('#upload-progress-wrap').style.display = 'none';
   qs('#file-input').value = '';
   qs('#upload-snapshot-time').value = '';
+
+  // Populate "Compare against" dropdown with current uploads
+  const basedOnSel = qs('#upload-based-on');
+  basedOnSel.innerHTML = '<option value="">— new upload, no comparison —</option>';
+  state.uploads.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.original_name + (u.snapshot_time ? `  (${fmtDate(u.snapshot_time)} UTC)` : '');
+    basedOnSel.appendChild(opt);
+  });
+
   qs('#upload-modal').style.display = 'flex';
 });
 
@@ -910,6 +927,8 @@ qs('#do-upload-btn').addEventListener('click', async () => {
   fd.append('file', selectedFile);
   const snapshotTimeInput = qs('#upload-snapshot-time').value;
   if (snapshotTimeInput) fd.append('snapshot_time', snapshotTimeInput + 'Z');
+  const basedOnVal = qs('#upload-based-on').value;
+  if (basedOnVal) fd.append('based_on_upload_id', basedOnVal);
 
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/upload');

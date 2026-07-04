@@ -237,6 +237,13 @@
       <input type="datetime-local" id="upload-snapshot-time" step="1">
       <p style="color:#475569;font-size:0.72rem;margin-top:4px">Used as the reference point for all "time ago" values (last logon, password age, …). Auto-detected from the file when left blank.</p>
     </div>
+    <div style="margin-top:14px">
+      <label for="upload-based-on" style="display:block;color:#94a3b8;font-size:0.78rem;margin-bottom:4px">Compare against (optional)</label>
+      <select id="upload-based-on">
+        <option value="">— new upload, no comparison —</option>
+      </select>
+      <p style="color:#475569;font-size:0.72rem;margin-top:4px">Compares this upload against a previous one. New objects are tagged <code>new</code>, removed objects are tagged <code>missing</code>.</p>
+    </div>
     <div id="upload-progress-wrap" style="display:none;margin-top:12px">
       <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <p id="upload-status" style="color:#94a3b8;font-size:0.78rem;margin-top:6px"></p>

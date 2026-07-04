@@ -42,12 +42,13 @@ def init_db():
     with get_db() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS uploads (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            original_name TEXT    NOT NULL,
-            stored_name   TEXT    NOT NULL,
-            uploaded_at   TEXT    DEFAULT (datetime('now')),
-            object_count  INTEGER DEFAULT 0,
-            snapshot_time TEXT
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_name       TEXT    NOT NULL,
+            stored_name         TEXT    NOT NULL,
+            uploaded_at         TEXT    DEFAULT (datetime('now')),
+            object_count        INTEGER DEFAULT 0,
+            snapshot_time       TEXT,
+            based_on_upload_id  INTEGER REFERENCES uploads(id) ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS objects (
@@ -76,6 +77,8 @@ def init_db():
             is_favorite          INTEGER DEFAULT 0,
             comment              TEXT,
             tags                 TEXT,
+            -- identity key for cross-upload diff
+            object_guid          TEXT,
             -- full object serialised as JSON
             fields_json          TEXT
         );
@@ -89,13 +92,27 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_obj_logonts ON objects(last_logon_timestamp);
         """)
 
+        # Add missing columns if the DB was created before they existed.
         upload_cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploads)")}
         if "snapshot_time" not in upload_cols:
             conn.execute("ALTER TABLE uploads ADD COLUMN snapshot_time TEXT")
 
+        # Add missing columns to objects table if they don't exist.
         obj_cols = {row["name"] for row in conn.execute("PRAGMA table_info(objects)")}
         if "tags" not in obj_cols:
             conn.execute("ALTER TABLE objects ADD COLUMN tags TEXT")
+
+        # Add object_guid column to objects table if it doesn't exist, and backfill it from fields_json.objectGUID.
+        if "object_guid" not in obj_cols:
+            conn.execute("ALTER TABLE objects ADD COLUMN object_guid TEXT")
+            conn.execute("""
+                UPDATE objects SET object_guid = json_extract(fields_json, '$.objectGUID')
+                WHERE object_guid IS NULL AND fields_json IS NOT NULL
+            """)
+
+        upload_cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploads)")}
+        if "based_on_upload_id" not in upload_cols:
+            conn.execute("ALTER TABLE uploads ADD COLUMN based_on_upload_id INTEGER REFERENCES uploads(id) ON DELETE SET NULL")
 
         # Backfill uploads made before snapshot-time detection existed, using
         # the original file if it's still sitting in UPLOAD_DIR.
@@ -314,6 +331,7 @@ def store_objects(upload_id: int, objects: list[dict]):
             filetime_to_dt(obj.get("badPasswordTime")),
             _int_or_none(obj.get("userAccountControl")),
             _int_or_none(obj.get("adminCount")),
+            obj.get("objectGUID") or obj.get("objectguid"),
             json.dumps(obj, ensure_ascii=False),
         ))
 
@@ -324,14 +342,97 @@ def store_objects(upload_id: int, objects: list[dict]):
                 cn, distinguished_name, sam_account_name, user_principal_name, description,
                 when_created, when_changed, pwd_last_set,
                 last_logon, last_logon_timestamp, bad_password_time,
-                user_account_control, admin_count, fields_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                user_account_control, admin_count, object_guid, fields_json
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             rows,
         )
         conn.execute(
             "UPDATE uploads SET object_count=? WHERE id=?",
             (len(objects), upload_id),
         )
+
+
+# ── Snapshot diff ────────────────────────────────────────────────────────────
+
+SYSTEM_TAGS = {'new', 'missing'}
+
+
+def diff_with_baseline(conn, new_upload_id: int, base_upload_id: int):
+    """
+    Compare new_upload against base_upload by objectGUID (fallback: distinguishedName).
+    - Objects in new only     → tag 'new'
+    - Objects in both         → inherit comment, non-system tags, is_favorite from base
+    - Objects in base only    → copied into new upload tagged 'missing'
+    """
+    base_rows = conn.execute(
+        "SELECT * FROM objects WHERE upload_id=?", (base_upload_id,)
+    ).fetchall()
+
+    base_by_guid: dict = {}
+    base_by_dn:   dict = {}
+    for row in base_rows:
+        if row["object_guid"]:
+            base_by_guid[row["object_guid"]] = row
+        elif row["distinguished_name"]:
+            base_by_dn[row["distinguished_name"]] = row
+
+    new_rows = conn.execute(
+        "SELECT id, object_guid, distinguished_name, tags FROM objects WHERE upload_id=?",
+        (new_upload_id,)
+    ).fetchall()
+
+    matched_base_ids: set = set()
+
+    for nr in new_rows:
+        base = base_by_guid.get(nr["object_guid"]) if nr["object_guid"] else None
+        if base is None and nr["distinguished_name"]:
+            base = base_by_dn.get(nr["distinguished_name"])
+
+        cur_tags   = [t for t in json.loads(nr["tags"] or "[]") if t not in SYSTEM_TAGS]
+
+        if base is None:
+            conn.execute("UPDATE objects SET tags=? WHERE id=?",
+                         (json.dumps(["new"] + cur_tags), nr["id"]))
+        else:
+            matched_base_ids.add(base["id"])
+            old_tags  = [t for t in json.loads(base["tags"] or "[]") if t not in SYSTEM_TAGS]
+            merged    = list(dict.fromkeys(cur_tags + old_tags))
+            conn.execute(
+                "UPDATE objects SET comment=?, tags=?, is_favorite=? WHERE id=?",
+                (base["comment"],
+                 json.dumps(merged) if merged else None,
+                 base["is_favorite"],
+                 nr["id"]),
+            )
+
+    for row in base_rows:
+        if row["id"] in matched_base_ids:
+            continue
+        old_tags = [t for t in json.loads(row["tags"] or "[]") if t not in SYSTEM_TAGS]
+        conn.execute(
+            """INSERT INTO objects (
+                upload_id, object_index, object_class, primary_class,
+                cn, distinguished_name, sam_account_name, user_principal_name,
+                description, when_created, when_changed, pwd_last_set,
+                last_logon, last_logon_timestamp, bad_password_time,
+                user_account_control, admin_count,
+                is_favorite, comment, tags, object_guid, fields_json
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (new_upload_id, row["object_index"], row["object_class"], row["primary_class"],
+             row["cn"], row["distinguished_name"], row["sam_account_name"],
+             row["user_principal_name"], row["description"],
+             row["when_created"], row["when_changed"], row["pwd_last_set"],
+             row["last_logon"], row["last_logon_timestamp"], row["bad_password_time"],
+             row["user_account_control"], row["admin_count"],
+             row["is_favorite"], row["comment"],
+             json.dumps(["missing"] + old_tags),
+             row["object_guid"], row["fields_json"]),
+        )
+
+    total = conn.execute(
+        "SELECT COUNT(*) FROM objects WHERE upload_id=?", (new_upload_id,)
+    ).fetchone()[0]
+    conn.execute("UPDATE uploads SET object_count=? WHERE id=?", (total, new_upload_id))
 
 
 # ── ADExplorer snapshot conversion ───────────────────────────────────────────
@@ -393,7 +494,9 @@ def api_upload():
     orig = f.filename
     is_dat = orig.lower().endswith(".dat")
 
-    user_snapshot_time = (request.form.get("snapshot_time") or "").strip()
+    user_snapshot_time  = (request.form.get("snapshot_time") or "").strip()
+    based_on_upload_id  = request.form.get("based_on_upload_id", type=int) or None
+
     snapshot_time = None
     if user_snapshot_time:
         snapshot_time = parse_utc_datetime(user_snapshot_time)
@@ -424,12 +527,16 @@ def api_upload():
 
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO uploads (original_name, stored_name, snapshot_time) VALUES (?,?,?)",
-            (orig, stored, snapshot_time),
+            "INSERT INTO uploads (original_name, stored_name, snapshot_time, based_on_upload_id) VALUES (?,?,?,?)",
+            (orig, stored, snapshot_time, based_on_upload_id),
         )
         upload_id = cur.lastrowid
 
     store_objects(upload_id, objects)
+
+    if based_on_upload_id:
+        with get_db() as conn:
+            diff_with_baseline(conn, upload_id, based_on_upload_id)
 
     with get_db() as conn:
         row = conn.execute(
@@ -904,35 +1011,42 @@ def api_stats():
     uid = request.args.get("upload_id", type=int)
     with get_db() as conn:
         if uid:
-            base = "WHERE upload_id=?"
+            base      = "WHERE upload_id=?"
+            base_real = "WHERE upload_id=? AND (tags IS NULL OR tags NOT LIKE '%\"missing\"%')"
+            base_miss = "WHERE upload_id=? AND tags LIKE '%\"missing\"%'"
             args = [uid]
         else:
-            base, args = "", []
+            base = base_real = base_miss = ""
+            args = []
 
-        total = conn.execute(
-            f"SELECT COUNT(*) FROM objects {base}", args
-        ).fetchone()[0]
+        def _and(clause):
+            return ("AND" if args else "WHERE") + " " + clause
 
-        users = conn.execute(
-            f"SELECT COUNT(*) FROM objects {base + (' AND' if uid else 'WHERE')} primary_class='user'",
-            args,
-        ).fetchone()[0]
+        total     = conn.execute(f"SELECT COUNT(*) FROM objects {base_real}", args).fetchone()[0]
+        missing_t = conn.execute(f"SELECT COUNT(*) FROM objects {base_miss}", args).fetchone()[0]
 
-        computers = conn.execute(
-            f"SELECT COUNT(*) FROM objects {base + (' AND' if uid else 'WHERE')} primary_class='computer'",
-            args,
-        ).fetchone()[0]
+        clause_user     = _and("primary_class='user'")
+        clause_computer = _and("primary_class='computer'")
+        clause_group    = _and("primary_class='group'")
 
-        groups = conn.execute(
-            f"SELECT COUNT(*) FROM objects {base + (' AND' if uid else 'WHERE')} primary_class='group'",
-            args,
-        ).fetchone()[0]
+        users     = conn.execute(f"SELECT COUNT(*) FROM objects {base_real} {clause_user}",     args).fetchone()[0]
+        missing_u = conn.execute(f"SELECT COUNT(*) FROM objects {base_miss} {clause_user}",     args).fetchone()[0]
+
+        computers     = conn.execute(f"SELECT COUNT(*) FROM objects {base_real} {clause_computer}", args).fetchone()[0]
+        missing_c     = conn.execute(f"SELECT COUNT(*) FROM objects {base_miss} {clause_computer}", args).fetchone()[0]
+
+        groups     = conn.execute(f"SELECT COUNT(*) FROM objects {base_real} {clause_group}",   args).fetchone()[0]
+        missing_g  = conn.execute(f"SELECT COUNT(*) FROM objects {base_miss} {clause_group}",   args).fetchone()[0]
 
     return jsonify({
-        "total": total,
-        "users": users,
-        "computers": computers,
-        "groups": groups,
+        "total":            total,
+        "total_missing":    missing_t,
+        "users":            users,
+        "users_missing":    missing_u,
+        "computers":        computers,
+        "computers_missing": missing_c,
+        "groups":           groups,
+        "groups_missing":   missing_g,
     })
 
 

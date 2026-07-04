@@ -14,7 +14,11 @@ body {
 .detail-panel  { width: 480px; min-width: 480px; }
 
 /* ── Table rows ───────────────────────────────────────────────────────────── */
-.row-hover:hover { background: #1e3a5f !important; cursor: pointer; }
+.row-hover:hover  { background: #1e3a5f !important; cursor: pointer; }
+.row-new          { background: rgba(34, 197, 94, 0.08); }
+.row-new:hover    { background: rgba(34, 197, 94, 0.18) !important; }
+.row-missing      { background: rgba(239, 68, 68, 0.08); }
+.row-missing:hover{ background: rgba(239, 68, 68, 0.18) !important; }
 
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 .badge {

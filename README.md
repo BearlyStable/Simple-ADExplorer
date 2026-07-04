@@ -32,6 +32,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 - **Export** — export the current filtered view as a Markdown table; choose which columns to include via a modal
 - **Snapshot time** — each upload records its collection time (auto-detected from the file or set manually via the clock button in the top bar); all relative-age displays ("3 months ago") use this as the reference point instead of wall-clock time
 - **Multiple log support** — upload logs from several DCs and switch between them via the top bar
+- **Snapshot diff** — when uploading a newer snapshot, optionally compare it against an existing one; new objects are tagged `new` (green row tint), objects removed since the baseline are copied in and tagged `missing` (red row tint); the stats bar shows the missing count as a red `+N` suffix; user-added tags, notes, and favourites are inherited from the baseline
 
 ---
 
@@ -287,7 +288,4 @@ backup
 type:group dn:*Admin*
 ```
 
----
 
-## TODO
-- Diff two uploads — which objects are new / gone between two snapshots?
