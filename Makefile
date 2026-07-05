@@ -20,12 +20,12 @@ help:
 	@echo "  setup    clone conversion tools, create venv, install dependencies"
 	@echo "  run      start the Flask development server (runs setup if needed)"
 	@echo "  release  build Docker image $(IMAGE):$(VERSION)"
-	@echo "  clean    remove the virtual environment"
+	@echo "  clean    remove the development and build artifacts"
 
 setup: .venv/pyvenv.cfg adex_deps/.installed
 
 ADExplorerSnapshot/ADExplorerSnapshot.py:
-	git clone --depth 1 https://github.com/c3c/ADExplorerSnapshot.git ADExplorerSnapshot
+	git clone --depth 1 https://github.com/Nm1ss/ADExplorerSnapshot.git ADExplorerSnapshot
 
 .venv/pyvenv.cfg: requirements.txt ADExplorerSnapshot/ADExplorerSnapshot.py
 	$(PYTHON) -m venv .venv
@@ -49,3 +49,13 @@ release:
 clean:
 	rm -rf .venv
 	@echo "Virtual environment removed."
+	rm -rf ADExplorerSnapshot
+	@echo "ADExplorerSnapshot removed."
+	rm -rf adex_deps
+	@echo "adex_deps removed."
+	rm -rf instance
+	@echo "instance removed."
+	rm -rf uploads
+	@echo "uploads removed."
+	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+	@echo "Python caches removed."
