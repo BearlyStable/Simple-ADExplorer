@@ -1050,5 +1050,31 @@ def api_stats():
     })
 
 
+@app.route("/api/backup")
+def api_backup():
+    tmp_path = DB_PATH.parent / f"_backup_{uuid.uuid4().hex}.db"
+    try:
+        src = sqlite3.connect(DB_PATH)
+        dst = sqlite3.connect(tmp_path)
+        src.backup(dst)
+        src.close()
+        dst.close()
+        with open(tmp_path, "rb") as fh:
+            raw = fh.read()
+    finally:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    filename = f"adexplorer-backup-{date_str}.db"
+    return Response(
+        raw,
+        mimetype="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

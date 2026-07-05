@@ -30,6 +30,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
   - **Notes** — free-text notes field per object; persists in the database; searchable with `notes:yes`
 - **Favourites** — click the star (☆/★) on any row or in the detail panel header to mark objects; a dedicated sidebar toggle shows only favourited objects; favourite flags persist in the database across sessions
 - **Export** — export the current filtered view as a Markdown table; choose which columns to include via a modal
+- **Database backup** — download a consistent snapshot of the full SQLite database (all uploads, objects, tags, notes, favourites) from the Export modal; use this before upgrading to a new version
 - **Snapshot time** — each upload records its collection time (auto-detected from the file or set manually via the clock button in the top bar); all relative-age displays ("3 months ago") use this as the reference point instead of wall-clock time
 - **Multiple log support** — upload logs from several DCs and switch between them via the top bar
 - **Snapshot diff** — when uploading a newer snapshot, optionally compare it against an existing one; new objects are tagged `new` (green row tint), objects removed since the baseline are copied in and tagged `missing` (red row tint); the stats bar shows the missing count as a red `+N` suffix; user-added tags, notes, and favourites are inherited from the baseline
@@ -77,7 +78,7 @@ For a production deployment (optional):
 
 ```bash
 pip install gunicorn          # Linux / macOS
-gunicorn -w 2 -b 0.0.0.0:5000 app:app
+gunicorn -w 1 -b 0.0.0.0:5000 app:app
 
 # Windows (waitress)
 pip install waitress
@@ -133,6 +134,32 @@ docker compose down -v
 ```
 
 The compose file uses named volumes and sets `restart: unless-stopped` so the container starts automatically after a reboot.
+
+### Backup and restore
+
+**Create a backup** using the "Download Backup" button in the Export modal (top-right of the UI).  
+The file is named `adexplorer-backup-YYYY-MM-DD.db` and contains the complete database — all uploads, objects, tags, notes, and favourites.
+
+**Restore a backup** by replacing the database file inside the named volume:
+
+```bash
+# 1. Stop the running container
+docker compose down
+
+# 2. Copy your backup file into the volume via a temporary Alpine container
+#    Replace the filename with your actual backup file.
+docker run --rm \
+  -v adexplorer-instance:/data \
+  -v "$(pwd):/backup" \
+  alpine \
+  cp /backup/adexplorer-backup-2026-07-05.db /data/bofhound.db
+
+# 3. Start again
+docker compose up -d
+```
+
+> **Note:** The backup contains object data only — not the raw uploaded log files.  
+> After a restore, the object table will be fully populated but the original `.log` / `.dat` files will not be present in `uploads/`. This has no effect on browsing, searching, or exporting.
 
 ---
 
@@ -208,6 +235,7 @@ Simple-ADExplorer/
 | `PATCH` | `/api/uploads/<id>/snapshot_time` | Override the snapshot time for an upload |
 | `GET` | `/api/classes` | Object-type counts for the filter sidebar |
 | `GET` | `/api/stats` | Summary counts (total, users, computers, groups) |
+| `GET` | `/api/backup` | Download the full SQLite database as `adexplorer-backup-YYYY-MM-DD.db` |
 
 ### `/api/objects` query parameters
 

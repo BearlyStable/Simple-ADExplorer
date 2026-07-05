@@ -1039,6 +1039,10 @@ qs('#export-modal').addEventListener('click', e => {
   if (e.target === qs('#export-modal')) qs('#export-modal').style.display = 'none';
 });
 
+qs('#do-backup-btn').addEventListener('click', () => {
+  window.location.href = '/api/backup';
+});
+
 qs('#do-export-btn').addEventListener('click', () => {
   const fields = Array.from(qsa('.export-field-cb:checked', qs('#export-fields'))).map(cb => cb.value);
   if (!fields.length) {
