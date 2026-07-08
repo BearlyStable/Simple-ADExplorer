@@ -48,7 +48,7 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 
 ```bash
 # 1. Clone the repository
-git clone ssh://forgejo@forgejo.nm1ss.net/Nm1ss/Simple-ADExplorer.git
+git clone https://github.com/Nm1ss/Simple-ADExplorer.git
 cd Simple-ADExplorer
 
 # 2. Create and activate a virtual environment
@@ -69,7 +69,7 @@ pip install -r requirements.txt
 ## Running the application
 
 ```bash
-python app.py
+python src/app.py
 ```
 
 The server starts on **http://localhost:5000** in debug mode.
@@ -78,10 +78,11 @@ For a production deployment (optional):
 
 ```bash
 pip install gunicorn          # Linux / macOS
-gunicorn -w 1 -b 0.0.0.0:5000 app:app
+gunicorn -w 1 -b 0.0.0.0:5000 --chdir src app:app
 
 # Windows (waitress)
 pip install waitress
+cd src
 waitress-serve --port=5000 app:app
 ```
 
@@ -115,22 +116,22 @@ Named volumes keep the SQLite database and uploaded log files alive across conta
 
 ### Run with Docker Compose
 
-A ready-made `docker-compose.yml` is included:
+A ready-made `docker/docker-compose.yml` is included:
 
 ```bash
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 To stop without losing data:
 
 ```bash
-docker compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
 To stop **and wipe all data** (volumes included):
 
 ```bash
-docker compose down -v
+docker compose -f docker/docker-compose.yml down -v
 ```
 
 The compose file uses named volumes and sets `restart: unless-stopped` so the container starts automatically after a reboot.
@@ -144,7 +145,7 @@ The file is named `adexplorer-backup-YYYY-MM-DD.db` and contains the complete da
 
 ```bash
 # 1. Stop the running container
-docker compose down
+docker compose -f docker/docker-compose.yml down
 
 # 2. Copy your backup file into the volume via a temporary Alpine container
 #    Replace the filename with your actual backup file.
@@ -155,7 +156,7 @@ docker run --rm \
   cp /backup/adexplorer-backup-2026-07-05.db /data/bofhound.db
 
 # 3. Start again
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 > **Note:** The backup contains object data only — not the raw uploaded log files.  
@@ -200,19 +201,21 @@ Objects are separated by a line of dashes (`--------------------`).
 
 ```
 Simple-ADExplorer/
-├── app.py              # Flask application — parser, SQLite logic, REST API
 ├── requirements.txt    # Python dependencies
 ├── Makefile            # setup / run / release / clean targets
-├── Dockerfile          # Production image (gunicorn, python:3.11-slim)
-├── docker-compose.yml  # Compose file with volume mounts for persistence
-├── templates/
-│   └── index.html      # HTML structure only (no inline CSS or JS)
-├── static/
-│   ├── style.css       # All custom styles (dark theme, badges, layout)
-│   └── app.js          # All application logic (state, API calls, rendering)
-├── instance/           # Created at runtime — contains bofhound.db (SQLite)
-├── uploads/            # Created at runtime — stores uploaded log files
-└── data_origin/        # Sample log files (not committed if added to .gitignore)
+├── .dockerignore       # Applies to the docker build context (repo root)
+├── src/
+│   ├── app.py           # Flask application — parser, SQLite logic, REST API
+│   ├── templates/
+│   │   └── index.html   # HTML structure only (no inline CSS or JS)
+│   ├── static/
+│   │   ├── style.css    # All custom styles (dark theme, badges, layout)
+│   │   └── app.js        # All application logic (state, API calls, rendering)
+│   ├── instance/         # Created at runtime — contains bofhound.db (SQLite)
+│   └── uploads/          # Created at runtime — stores uploaded log files
+└── docker/
+    ├── Dockerfile        # Production image (gunicorn, python:3.11-slim)
+    └── docker-compose.yml # Compose file with volume mounts for persistence
 ```
 
 ---
@@ -316,4 +319,29 @@ backup
 type:group dn:*Admin*
 ```
 
+---
+
+## License
+
+Simple-ADExplorer is licensed under the [GNU GPLv3](LICENSE).
+
+### Third-party software
+
+This project is built on top of the following open-source software. None of it is redistributed as source within this repository — dependencies are fetched via `pip` and `git clone` at setup/build time — but full credit belongs to their respective authors:
+
+| Project | License | Role |
+|---|---|---|
+| [Flask](https://github.com/pallets/flask) | BSD-3-Clause | Web framework |
+| [Werkzeug](https://github.com/pallets/werkzeug) | BSD-3-Clause | WSGI toolkit (Flask dependency) |
+| [gunicorn](https://github.com/benoitc/gunicorn) | MIT | Production WSGI server (Docker image) |
+| [waitress](https://github.com/Pylons/waitress) | ZPL 2.1 | Production WSGI server (Windows, optional) |
+| [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | MIT | Front-end styling |
+| [ADExplorerSnapshot.py](https://github.com/c3c/ADExplorerSnapshot.py) ([fork used here](https://github.com/Nm1ss/ADExplorerSnapshot)) | MIT | Converts `.dat` snapshots to bofhound log format |
+| [BloodHound.py](https://github.com/dirkjanm/BloodHound.py) (`bloodhound-ce`) | MIT | AD data structures, used by ADExplorerSnapshot |
+| [rich](https://github.com/Textualize/rich) | MIT | Console output, used by ADExplorerSnapshot |
+| [requests](https://github.com/psf/requests) | Apache-2.0 | HTTP client, used by ADExplorerSnapshot |
+| [dissect](https://github.com/fox-it/dissect) | AGPL-3.0-or-later | Binary parsing, used by ADExplorerSnapshot |
+| [bofhound](https://github.com/fortalice/bofhound) | BSD-4-Clause | Defines the `.log` format this viewer reads (not a code dependency — no bofhound code is used or bundled) |
+
+**A note on `dissect`:** it's the one copyleft (AGPL-3.0) dependency in this stack. It's never imported by this app directly — it's installed alongside `rich`, `bloodhound-ce`, and `requests` purely so the separately-cloned, MIT-licensed `ADExplorerSnapshot.py` can run as its own subprocess. Only one small submodule, `dissect.cstruct` (itself Apache-2.0-licensed, unlike the rest of the `dissect` suite), is actually used. If you want to remove any AGPL exposure entirely, swap the `dissect` install in the `Makefile` and `Dockerfile` for `dissect.cstruct` — it's the only piece that's ever imported.
 

@@ -11,9 +11,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt gunicorn \
     && pip install --no-cache-dir --target /app/adex_deps rich bloodhound-ce requests dissect
 
-COPY app.py .
-COPY templates/ templates/
-COPY static/ static/
+COPY src/app.py .
+COPY src/templates/ templates/
+COPY src/static/ static/
 
 RUN mkdir -p instance uploads
 

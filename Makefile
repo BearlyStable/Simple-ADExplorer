@@ -22,26 +22,26 @@ help:
 	@echo "  release  build Docker image $(IMAGE):$(VERSION)"
 	@echo "  clean    remove the development and build artifacts"
 
-setup: .venv/pyvenv.cfg adex_deps/.installed
+setup: .venv/pyvenv.cfg src/adex_deps/.installed
 
-ADExplorerSnapshot/ADExplorerSnapshot.py:
-	git clone --depth 1 https://github.com/Nm1ss/ADExplorerSnapshot.git ADExplorerSnapshot
+src/ADExplorerSnapshot/ADExplorerSnapshot.py:
+	git clone --depth 1 https://github.com/Nm1ss/ADExplorerSnapshot.git src/ADExplorerSnapshot
 
-.venv/pyvenv.cfg: requirements.txt ADExplorerSnapshot/ADExplorerSnapshot.py
+.venv/pyvenv.cfg: requirements.txt src/ADExplorerSnapshot/ADExplorerSnapshot.py
 	$(PYTHON) -m venv .venv
 	$(PIP) install --upgrade pip --quiet
 	$(PIP) install -r requirements.txt --quiet
 
-adex_deps/.installed: .venv/pyvenv.cfg
-	$(PIP) install --target adex_deps rich bloodhound-ce requests dissect --quiet
-	touch adex_deps/.installed
+src/adex_deps/.installed: .venv/pyvenv.cfg
+	$(PIP) install --target src/adex_deps rich bloodhound-ce requests dissect --quiet
+	touch src/adex_deps/.installed
 	@echo "Setup complete. Run 'make run' to start the server."
 
 run: .venv/pyvenv.cfg
-	$(VENV_PYTHON) app.py
+	$(VENV_PYTHON) src/app.py
 
 release:
-	docker build -t $(IMAGE):$(VERSION) .
+	docker build -f docker/Dockerfile -t $(IMAGE):$(VERSION) .
 	@echo "Built $(IMAGE):$(VERSION)"
 	docker image save -o $(IMAGE)-$(VERSION).tar.gz $(IMAGE):$(VERSION)
 	@echo "Exported $(IMAGE)-$(VERSION).tar.gz"
@@ -49,13 +49,13 @@ release:
 clean:
 	rm -rf .venv
 	@echo "Virtual environment removed."
-	rm -rf ADExplorerSnapshot
+	rm -rf src/ADExplorerSnapshot
 	@echo "ADExplorerSnapshot removed."
-	rm -rf adex_deps
+	rm -rf src/adex_deps
 	@echo "adex_deps removed."
-	rm -rf instance
+	rm -rf src/instance
 	@echo "instance removed."
-	rm -rf uploads
+	rm -rf src/uploads
 	@echo "uploads removed."
 	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	@echo "Python caches removed."

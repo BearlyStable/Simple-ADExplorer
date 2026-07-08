@@ -443,7 +443,8 @@ def convert_adsnapshot(snapshot_path: str) -> str:
     if not ADEXPLORER_SCRIPT.exists():
         raise RuntimeError(
             "ADExplorerSnapshot tool not found. "
-            "Run: git clone --depth 1 https://github.com/c3c/ADExplorerSnapshot.git ADExplorerSnapshot"
+            "Run: make setup (or git clone --depth 1 "
+            "https://github.com/Nm1ss/ADExplorerSnapshot.git src/ADExplorerSnapshot)"
         )
 
     tmp_out = Path(tempfile.mkdtemp(prefix="adex_"))
