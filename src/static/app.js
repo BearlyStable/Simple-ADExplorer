@@ -556,6 +556,388 @@ function attachDNLinks(container) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Security descriptor (nTSecurityDescriptor) — binary parsing & rendering
+//
+// nTSecurityDescriptor arrives as a base64-encoded, self-relative SECURITY_DESCRIPTOR
+// (MS-DTYP 2.4.6): a fixed 20-byte header followed by an owner SID, a group SID,
+// a SACL and a DACL, each a list of ACEs (MS-DTYP 2.4.4/2.4.5).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Universal / BUILTIN principals — not real AD objects, so never linkable.
+const WELL_KNOWN_SIDS = {
+  'S-1-0-0': 'Nobody', 'S-1-1-0': 'Everyone',
+  'S-1-3-0': 'Creator Owner', 'S-1-3-1': 'Creator Group',
+  'S-1-5-1': 'Dialup', 'S-1-5-2': 'Network', 'S-1-5-3': 'Batch', 'S-1-5-4': 'Interactive',
+  'S-1-5-6': 'Service', 'S-1-5-7': 'Anonymous Logon',
+  'S-1-5-9': 'Enterprise Domain Controllers', 'S-1-5-10': 'Principal Self',
+  'S-1-5-11': 'Authenticated Users', 'S-1-5-18': 'Local System',
+  'S-1-5-19': 'Local Service', 'S-1-5-20': 'Network Service',
+  'S-1-5-32-544': 'BUILTIN\\Administrators', 'S-1-5-32-545': 'BUILTIN\\Users',
+  'S-1-5-32-546': 'BUILTIN\\Guests', 'S-1-5-32-548': 'BUILTIN\\Account Operators',
+  'S-1-5-32-549': 'BUILTIN\\Server Operators', 'S-1-5-32-550': 'BUILTIN\\Print Operators',
+  'S-1-5-32-551': 'BUILTIN\\Backup Operators', 'S-1-5-32-554': 'BUILTIN\\Pre-Windows 2000 Compatible Access',
+  'S-1-5-32-555': 'BUILTIN\\Remote Desktop Users',
+};
+
+// Domain-relative well-known RIDs (S-1-5-21-<domain>-<RID>) — these DO correspond
+// to a real group/user object in the domain, so they're resolved as links.
+const DOMAIN_RID_NAMES = {
+  500: 'Administrator', 501: 'Guest', 502: 'krbtgt',
+  512: 'Domain Admins', 513: 'Domain Users', 514: 'Domain Guests',
+  515: 'Domain Computers', 516: 'Domain Controllers', 517: 'Cert Publishers',
+  518: 'Schema Admins', 519: 'Enterprise Admins', 520: 'Group Policy Creator Owners',
+  526: 'Key Admins', 527: 'Enterprise Key Admins', 553: 'RAS and IAS Servers',
+};
+
+// Verified against Microsoft's AD schema "Extended Rights" reference — GUIDs used
+// with the DS_CONTROL_ACCESS bit to name the specific extended/validated-write right.
+const RIGHTS_GUIDS = {
+  '00299570-246d-11d0-a768-00aa006e0529': 'User-Force-Change-Password',
+  'ab721a53-1e2f-11d0-9819-00aa0040529b': 'User-Change-Password',
+  '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Get-Changes',
+  '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Get-Changes-All',
+  '89e95b76-444d-4c62-991a-0facbeda640c': 'DS-Replication-Get-Changes-In-Filtered-Set',
+  '1131f6ab-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Synchronize',
+  'bf9679c0-0de6-11d0-a285-00aa003049e2': 'Self-Membership (Add/Remove self as member)',
+};
+
+const ACE_TYPE_NAMES = {
+  0x00: 'Allow', 0x01: 'Deny', 0x02: 'Audit', 0x03: 'Alarm',
+  0x04: 'Allow (Compound)', 0x05: 'Allow (Object)', 0x06: 'Deny (Object)',
+  0x07: 'Audit (Object)', 0x08: 'Alarm (Object)', 0x09: 'Allow (Callback)',
+  0x0A: 'Deny (Callback)', 0x0B: 'Allow (Callback Object)', 0x0C: 'Deny (Callback Object)',
+  0x0D: 'Audit (Callback)', 0x0E: 'Audit (Callback Object)', 0x11: 'Mandatory Label',
+};
+const OBJECT_ACE_TYPES = new Set([0x05, 0x06, 0x07, 0x08, 0x0B, 0x0C, 0x0E]);
+const DENY_ACE_TYPES  = new Set([0x01, 0x06, 0x0A, 0x0C]);
+const AUDIT_ACE_TYPES = new Set([0x02, 0x07, 0x08, 0x0D, 0x0E]);
+
+const GENERIC_RIGHTS = [
+  [0x80000000, 'GenericRead'], [0x40000000, 'GenericWrite'], [0x20000000, 'GenericExecute'],
+];
+const STANDARD_RIGHTS = [
+  [0x00010000, 'Delete'], [0x00020000, 'ReadControl'], [0x00040000, 'WriteDacl'], [0x00080000, 'WriteOwner'],
+];
+const DS_RIGHTS = [
+  [0x00000100, 'ControlAccess (Extended Right)'], [0x00000080, 'ListObject'],
+  [0x00000040, 'DeleteTree'], [0x00000020, 'WriteProperty'], [0x00000010, 'ReadProperty'],
+  [0x00000008, 'Self (Validated Write)'], [0x00000004, 'ListChildren'],
+  [0x00000002, 'DeleteChild'], [0x00000001, 'CreateChild'],
+];
+
+function decodeAccessMask(mask) {
+  if (mask & 0x10000000) return ['GenericAll'];
+  const rights = [];
+  for (const [bit, name] of GENERIC_RIGHTS) if (mask & bit) rights.push(name);
+  for (const [bit, name] of STANDARD_RIGHTS) if (mask & bit) rights.push(name);
+  for (const [bit, name] of DS_RIGHTS) if (mask & bit) rights.push(name);
+  return rights.length ? rights : [`0x${(mask >>> 0).toString(16)}`];
+}
+
+function base64ToBytes(b64) {
+  try {
+    const bin = atob(b64.replace(/\s/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function hex(n, width) {
+  return n.toString(16).padStart(width, '0');
+}
+
+function guidToString(bytes, offset) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset + offset, 16);
+  const d1 = hex(dv.getUint32(0, true), 8);
+  const d2 = hex(dv.getUint16(4, true), 4);
+  const d3 = hex(dv.getUint16(6, true), 4);
+  let d4 = '';
+  for (let i = 8; i < 16; i++) d4 += hex(bytes[offset + i], 2);
+  return `${d1}-${d2}-${d3}-${d4.slice(0, 4)}-${d4.slice(4)}`;
+}
+
+function sidToString(bytes, offset) {
+  const revision = bytes[offset];
+  const subCount  = bytes[offset + 1];
+  let authority = 0;
+  for (let i = 0; i < 6; i++) authority = authority * 256 + bytes[offset + 2 + i];
+  const dv = new DataView(bytes.buffer, bytes.byteOffset + offset + 8, subCount * 4);
+  let sid = `S-${revision}-${authority}`;
+  for (let i = 0; i < subCount; i++) sid += '-' + dv.getUint32(i * 4, true);
+  return { sid, length: 8 + subCount * 4 };
+}
+
+function parseAce(bytes, offset) {
+  const header = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
+  const type  = bytes[offset];
+  const flags = bytes[offset + 1];
+  const size  = header.getUint16(2, true);
+  let p = offset + 4;
+
+  const maskDv = new DataView(bytes.buffer, bytes.byteOffset + p, 4);
+  const mask = maskDv.getUint32(0, true);
+  p += 4;
+
+  let objectType = null, inheritedObjectType = null;
+  if (OBJECT_ACE_TYPES.has(type)) {
+    const objFlags = new DataView(bytes.buffer, bytes.byteOffset + p, 4).getUint32(0, true);
+    p += 4;
+    if (objFlags & 0x1) { objectType = guidToString(bytes, p); p += 16; }
+    if (objFlags & 0x2) { inheritedObjectType = guidToString(bytes, p); p += 16; }
+  }
+
+  const { sid: trusteeSid } = sidToString(bytes, p);
+
+  return {
+    typeName: ACE_TYPE_NAMES[type] || `Unknown (0x${hex(type, 2)})`,
+    isDeny: DENY_ACE_TYPES.has(type),
+    isAudit: AUDIT_ACE_TYPES.has(type),
+    inherited: !!(flags & 0x10),
+    rights: decodeAccessMask(mask),
+    objectType,
+    objectTypeName: objectType ? RIGHTS_GUIDS[objectType.toLowerCase()] || null : null,
+    inheritedObjectType,
+    trusteeSid,
+    size,
+  };
+}
+
+function parseAcl(bytes, offset) {
+  const aceCount = new DataView(bytes.buffer, bytes.byteOffset + offset, 8).getUint16(4, true);
+  const aces = [];
+  let p = offset + 8;
+  for (let i = 0; i < aceCount && p < bytes.length; i++) {
+    const ace = parseAce(bytes, p);
+    aces.push(ace);
+    p += ace.size;
+  }
+  return aces;
+}
+
+function parseSecurityDescriptor(b64) {
+  const bytes = base64ToBytes(b64);
+  if (!bytes || bytes.length < 20) return null;
+  try {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, 20);
+    const control  = dv.getUint16(2, true);
+    const offOwner = dv.getUint32(4, true);
+    const offGroup = dv.getUint32(8, true);
+    const offSacl  = dv.getUint32(12, true);
+    const offDacl  = dv.getUint32(16, true);
+
+    return {
+      owner: offOwner ? sidToString(bytes, offOwner).sid : null,
+      group: offGroup ? sidToString(bytes, offGroup).sid : null,
+      dacl: (control & 0x0004) && offDacl ? parseAcl(bytes, offDacl) : null,
+      sacl: (control & 0x0010) && offSacl ? parseAcl(bytes, offSacl) : null,
+      daclProtected: !!(control & 0x1000),
+      saclProtected: !!(control & 0x2000),
+    };
+  } catch {
+    return null;
+  }
+}
+
+let _sidRegistry = [];
+
+function wellKnownSidInfo(sid) {
+  if (WELL_KNOWN_SIDS[sid]) return { name: WELL_KNOWN_SIDS[sid], linkable: false };
+  const m = /^S-1-5-21-\d+-\d+-\d+-(\d+)$/.exec(sid);
+  if (m && DOMAIN_RID_NAMES[m[1]]) return { name: DOMAIN_RID_NAMES[m[1]], linkable: true };
+  return null;
+}
+
+function renderSidCell(sid) {
+  const known = wellKnownSidInfo(sid);
+  if (known && !known.linkable) {
+    return `<span style="color:#94a3b8" title="${esc(sid)}">${esc(known.name)}</span>`;
+  }
+  const idx = _sidRegistry.length;
+  _sidRegistry.push(sid);
+  const label = known ? known.name : sid;
+  return `<a class="dn-link sid-link" href="#" data-sid-idx="${idx}" title="${esc(sid)}">${esc(label)}</a>`;
+}
+
+function attachSidLinks(container) {
+  qsa('.sid-link', container).forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      navigateToSid(_sidRegistry[parseInt(a.dataset.sidIdx)]);
+    });
+  });
+}
+
+async function navigateToSid(sid) {
+  const uid = state.selectedUploadId;
+  const url = '/api/objects/by-sid?sid=' + encodeURIComponent(sid) +
+              (uid ? '&upload_id=' + uid : '');
+  try {
+    const result = await api(url);
+    await showDetail(result.id, true);
+  } catch {
+    showToast('Trustee not found in this upload', 'err');
+  }
+}
+
+function toggleRawSD(id) {
+  const el = qs(`#${id}-long`);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+window.toggleRawSD = toggleRawSD;
+
+// Principals for which broad control is expected/by-design, so flagging them
+// as "risky" would just be noise — these are excluded from the risk heuristic.
+const SAFE_PRINCIPAL_NAMES = new Set([
+  'Domain Admins', 'Enterprise Admins', 'Administrator', 'Schema Admins',
+  'BUILTIN\\Administrators', 'Local System', 'Enterprise Domain Controllers',
+  'Principal Self',
+]);
+
+// Best-effort heuristic for "commonly abused for AD privilege escalation /
+// lateral movement" — the same class of rights BloodHound-style tooling flags
+// as high-value edges. This is NOT a definitive vulnerability finding: an
+// Allow ACE granting one of these to a principal that legitimately needs it
+// is normal. Always verify the grantee is expected to hold this access.
+function assessAceRisk(ace) {
+  if (ace.isDeny || ace.isAudit) return null;
+  const known = wellKnownSidInfo(ace.trusteeSid);
+  if (known && SAFE_PRINCIPAL_NAMES.has(known.name)) return null;
+
+  const reasons = [];
+  if (ace.rights.includes('GenericAll')) reasons.push('Full control of the object');
+  if (ace.rights.includes('GenericWrite')) reasons.push('Can modify most attributes');
+  if (ace.rights.includes('WriteDacl')) reasons.push('Can grant itself (or anyone) any other permission');
+  if (ace.rights.includes('WriteOwner')) reasons.push('Can take ownership of the object');
+  if (ace.rights.includes('WriteProperty') && !ace.objectType) reasons.push('Can write any attribute');
+  if (ace.rights.includes('Self (Validated Write)') && !ace.objectType) reasons.push('Can perform any validated write');
+  if (ace.rights.includes('ControlAccess (Extended Right)')) {
+    if (!ace.objectType) {
+      reasons.push('Holds every extended right (password reset, replication, …)');
+    } else if (ace.objectTypeName === 'User-Force-Change-Password') {
+      reasons.push("Can reset this account's password without knowing it");
+    } else if (ace.objectTypeName === 'DS-Replication-Get-Changes' || ace.objectTypeName === 'DS-Replication-Get-Changes-All') {
+      reasons.push('Part of the rights needed for a DCSync attack');
+    } else if (ace.objectTypeName === 'Self-Membership (Add/Remove self as member)') {
+      reasons.push('Can add itself to this group');
+    }
+  }
+  return reasons.length ? reasons : null;
+}
+
+function renderAceRow(ace) {
+  const rightsHtml = ace.rights.map(r => `<span class="ace-right" style="display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:1px 6px;margin:1px;font-size:0.7rem;color:#e2e8f0">${esc(r)}</span>`).join('');
+  const objectTypeHtml = ace.objectType
+    ? `<span title="${esc(ace.objectType)}">${esc(ace.objectTypeName || ace.objectType)}</span>`
+    : '<span style="color:#334155">—</span>';
+  const kindColor = ace.isDeny ? '#f87171' : ace.isAudit ? '#fbbf24' : '#6ee7b7';
+
+  const risk = assessAceRisk(ace);
+  const rowStyle = risk
+    ? 'border-bottom:1px solid #1e293b;background:rgba(248,113,113,0.08)'
+    : 'border-bottom:1px solid #1e293b';
+  const riskHtml = risk
+    ? `<span title="${esc(risk.join('; '))}" style="display:inline-flex;align-items:center;gap:3px;color:#f87171;font-weight:600;font-size:0.7rem;white-space:nowrap">⚠ Risky</span>`
+    : '<span style="color:#334155">—</span>';
+
+  return `<tr style="${rowStyle}">
+    <td style="padding:4px 8px;color:${kindColor};font-weight:600;white-space:nowrap;vertical-align:top">${ace.isDeny ? 'Deny' : ace.isAudit ? 'Audit' : 'Allow'}</td>
+    <td style="padding:4px 8px;vertical-align:top;white-space:nowrap">${renderSidCell(ace.trusteeSid)}</td>
+    <td style="padding:4px 8px;vertical-align:top">${rightsHtml}</td>
+    <td style="padding:4px 8px;vertical-align:top;font-size:0.75rem;color:#94a3b8">${objectTypeHtml}</td>
+    <td style="padding:4px 8px;vertical-align:top;font-size:0.72rem;color:#475569;white-space:nowrap">${ace.inherited ? 'Inherited' : 'Explicit'}</td>
+    <td style="padding:4px 8px;vertical-align:top">${riskHtml}</td>
+  </tr>`;
+}
+
+let _sdCache = {};
+
+function renderSecurityDescriptorField(b64, shortId, objName) {
+  const sd = parseSecurityDescriptor(b64);
+  _sdCache[shortId] = { sd, b64, objName };
+
+  if (!sd) {
+    return `<span style="color:#334155;font-size:0.7rem">Could not parse security descriptor. ${esc(b64.slice(0, 80))}…</span>`;
+  }
+
+  const daclCount = sd.dacl ? sd.dacl.length : 0;
+  const saclCount = sd.sacl ? sd.sacl.length : 0;
+  const denyCount = sd.dacl ? sd.dacl.filter(a => a.isDeny).length : 0;
+  const riskyCount = sd.dacl ? sd.dacl.filter(a => assessAceRisk(a)).length : 0;
+
+  const summary = daclCount
+    ? `${daclCount} DACL entr${daclCount === 1 ? 'y' : 'ies'}${denyCount ? ` (${denyCount} deny)` : ''}${saclCount ? ` · ${saclCount} audit` : ''}`
+    : 'No DACL — full access to everyone';
+  const riskyBadge = riskyCount
+    ? `<span style="color:#f87171;font-size:0.72rem;font-weight:600">⚠ ${riskyCount} risky</span>`
+    : '';
+
+  return `<div style="display:flex;align-items:center;gap:10px">
+    <span style="color:#94a3b8;font-size:0.78rem">${esc(summary)}</span>
+    ${riskyBadge}
+    <button class="btn btn-ghost" style="padding:2px 10px;font-size:0.72rem" onclick="openAclModal('${shortId}');return false">View permissions table</button>
+  </div>`;
+}
+
+function renderAclModalHtml(shortId) {
+  const entry = _sdCache[shortId];
+  if (!entry || !entry.sd) return '<div style="color:#475569">Could not parse security descriptor.</div>';
+  const { sd, b64 } = entry;
+
+  const header = `<tr style="text-align:left;color:#64748b;font-size:0.68rem;text-transform:uppercase">
+      <th style="padding:4px 8px">Type</th><th style="padding:4px 8px">Trustee</th>
+      <th style="padding:4px 8px">Rights</th><th style="padding:4px 8px">Applies To</th><th style="padding:4px 8px">Inheritance</th>
+      <th style="padding:4px 8px">Risk</th>
+    </tr>`;
+
+  let html = `<div style="font-size:0.78rem;margin-bottom:8px;color:#94a3b8">
+      Owner: ${sd.owner ? renderSidCell(sd.owner) : '<span style="color:#334155">—</span>'}
+      &nbsp;·&nbsp; Group: ${sd.group ? renderSidCell(sd.group) : '<span style="color:#334155">—</span>'}
+    </div>`;
+
+  html += `<div style="font-size:0.7rem;color:#475569;margin-bottom:10px">
+      <span style="color:#f87171">⚠ Risky</span> flags rights commonly abused for AD privilege escalation (full control, WriteDacl/Owner, password reset, DCSync, …) granted to a principal other than the usual admin groups. This is a heuristic, not a confirmed vulnerability — always check whether the grantee is actually expected to have this access.
+    </div>`;
+
+  html += `<div style="color:#3b82f6;font-size:0.7rem;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em">
+      Discretionary ACL${sd.daclProtected ? ' <span style="color:#f87171;font-weight:400;text-transform:none;letter-spacing:normal">· protected from inheritance</span>' : ''}
+    </div>`;
+  html += sd.dacl && sd.dacl.length
+    ? `<table style="width:100%;border-collapse:collapse;margin-bottom:12px">${header}${sd.dacl.map(renderAceRow).join('')}</table>`
+    : `<div style="color:#475569;font-size:0.75rem;margin-bottom:12px">No DACL present — this grants full access to everyone.</div>`;
+
+  if (sd.sacl && sd.sacl.length) {
+    html += `<div style="color:#3b82f6;font-size:0.7rem;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em">
+        System ACL (audit)${sd.saclProtected ? ' <span style="color:#f87171;font-weight:400;text-transform:none;letter-spacing:normal">· protected</span>' : ''}
+      </div>`;
+    html += `<table style="width:100%;border-collapse:collapse;margin-bottom:12px">${header}${sd.sacl.map(renderAceRow).join('')}</table>`;
+  }
+
+  html += `<div><a href="#" style="color:#334155;font-size:0.68rem" onclick="toggleRawSD('${shortId}');return false">show raw base64</a>
+    <span class="field-long" id="${shortId}-long" style="display:none;font-size:0.68rem;color:#334155;word-break:break-all"><br>${esc(b64)}</span></div>`;
+
+  return html;
+}
+
+function openAclModal(shortId) {
+  const entry = _sdCache[shortId];
+  const content = qs('#acl-modal-content');
+  content.innerHTML = renderAclModalHtml(shortId);
+  qs('#acl-modal-title').textContent = entry && entry.objName
+    ? `Security Descriptor — ${entry.objName}`
+    : 'Security Descriptor';
+  qs('#acl-modal').style.display = 'flex';
+  attachSidLinks(content);
+  qsa('.sid-link', content).forEach(a => {
+    a.addEventListener('click', () => { qs('#acl-modal').style.display = 'none'; });
+  });
+}
+window.openAclModal = openAclModal;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Detail panel — field rendering
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -580,6 +962,8 @@ const GROUP_ORDER = [
 
 function renderDetail(obj) {
   _dnRegistry = [];
+  _sidRegistry = [];
+  _sdCache = {};
   const fields = obj.fields || {};
   const title  = fields.cn || fields.name || obj.cn || 'Object';
   qs('#detail-title').textContent = title;
@@ -624,6 +1008,8 @@ function renderDetail(obj) {
         : `<span style="color:#e2e8f0">${esc(valStr)}</span>`;
     } else if (Array.isArray(val)) {
       displayVal = val.map(v => `<div>${maybeDNLink(v)}</div>`).join('');
+    } else if (key === 'nTSecurityDescriptor') {
+      displayVal = renderSecurityDescriptorField(valStr, `field-${key}-${obj.id}`, title);
     } else if (LONG_FIELDS.has(key) || valStr.length > 300) {
       const shortId = `field-${key}-${obj.id}`;
       displayVal = `<span style="color:#334155;font-size:0.7rem" id="${shortId}-short">${esc(valStr.slice(0, 120))}… <a href="#" style="color:#3b82f6" onclick="toggleLong('${shortId}');return false">show</a></span>
@@ -664,6 +1050,7 @@ function renderDetail(obj) {
   const detailContent = qs('#detail-content');
   detailContent.innerHTML = html || '<div style="color:#475569;padding:20px">No displayable fields.</div>';
   attachDNLinks(detailContent);
+  attachSidLinks(detailContent);
 
   // ── Notes / comment box ───────────────────────────────────────────────────
   const notesWrap = document.createElement('div');
@@ -1055,6 +1442,14 @@ qs('#do-export-btn').addEventListener('click', () => {
   params.set('fields', fields.join(','));
   window.location.href = '/api/objects/export?' + params.toString();
   qs('#export-modal').style.display = 'none';
+});
+
+qs('#close-acl-btn').addEventListener('click', () => {
+  qs('#acl-modal').style.display = 'none';
+});
+
+qs('#acl-modal').addEventListener('click', e => {
+  if (e.target === qs('#acl-modal')) qs('#acl-modal').style.display = 'none';
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

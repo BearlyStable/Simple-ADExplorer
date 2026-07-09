@@ -290,6 +290,17 @@
   </div>
 </div>
 
+<!-- SECURITY DESCRIPTOR MODAL -->
+<div id="acl-modal" class="overlay" style="display:none">
+  <div class="modal" style="width:90vw;height:80vh;max-width:95vw;max-height:95vh;min-width:480px;min-height:280px;overflow:hidden;resize:both;display:flex;flex-direction:column" title="Drag the bottom-right corner to resize">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-shrink:0">
+      <h2 id="acl-modal-title" style="font-size:1.1rem;font-weight:700;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">Security Descriptor</h2>
+      <button id="close-acl-btn" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:1.3rem;line-height:1;flex-shrink:0" title="Close">&times;</button>
+    </div>
+    <div id="acl-modal-content" style="flex:1;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 

@@ -12,11 +12,11 @@
 # Built Visual Studio Code Extensions
 *.vsix
 
-/uploads
-/instance
+/src/uploads
+/src/instance
 /.venv
-/ADExplorerSnapshot
-/adex_deps
+/src/ADExplorerSnapshot
+/src/adex_deps
 __pycache__/
 *.pyc
 
