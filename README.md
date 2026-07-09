@@ -24,7 +24,12 @@ Upload a `.log` file collected from a domain environment, then search, filter an
 - **Detail panel** — click any row to see every attribute grouped by category, with:
   - Timestamps decoded from Windows FILETIME and LDAP Generalized Time to human-readable dates + relative age
   - `userAccountControl` decoded to readable flag badges (Enabled / Disabled / Locked / No Pwd Expiry / …)
-  - Long binary fields (e.g. `nTSecurityDescriptor`) collapsed by default with an expand toggle
+  - **Security descriptor viewer** — `nTSecurityDescriptor` is parsed client-side (no server round-trip) into a readable permissions table, opened via a **View permissions table** button in a resizable floating window (defaults to 90% of the window width; drag the bottom-right corner to resize):
+    - Owner / Group and every DACL (and SACL, if present) entry: Type (Allow / Deny / Audit), Trustee, Rights, Applies To (named extended right / attribute, when recognized), Inheritance
+    - Rights are decoded from the raw access mask (`GenericAll`, `WriteDacl`, `WriteOwner`, `WriteProperty`, …); object-specific ACEs resolve their GUID against known AD extended rights (Force-Change-Password, DCSync, Self-Membership, …)
+    - Trustee SIDs resolve to friendly names (well-known principals, domain-relative groups like Domain Admins) and, where the trustee exists in the current dataset, become clickable links to that object's detail view
+    - ACEs that grant a commonly-abused right (`GenericAll`/`GenericWrite`, `WriteDacl`/`WriteOwner`, Force-Change-Password, DCSync, Self-Membership, …) to a principal other than the usual admin groups are flagged **⚠ Risky** — a heuristic hint to investigate, not a confirmed vulnerability
+  - Other long binary fields (e.g. `auditingPolicy`, certificate blobs) remain collapsed by default with an expand toggle
   - **DN navigation** — any Distinguished Name value is a clickable link that opens the referenced object directly in the detail panel; a **← Back** button lets you retrace your path (e.g. open a group → click a `member` DN → navigate to that user)
   - **Tags** — attach arbitrary `#tag` labels to any object; tags persist in the database and are searchable with the `tag:` operator
   - **Notes** — free-text notes field per object; persists in the database; searchable with `notes:yes`
@@ -234,6 +239,7 @@ Simple-ADExplorer/
 | `PATCH` | `/api/objects/<id>/comment` | Set or clear the notes text for one object |
 | `PATCH` | `/api/objects/<id>/tags` | Replace the tag list for one object (`{"tags": [...]}`) |
 | `GET` | `/api/objects/by-dn` | Look up an object by exact Distinguished Name |
+| `GET` | `/api/objects/by-sid` | Look up an object by exact `objectSid` (used to resolve ACE trustees to a linkable object) |
 | `GET` | `/api/objects/export` | Download the current filtered view as a Markdown table |
 | `PATCH` | `/api/uploads/<id>/snapshot_time` | Override the snapshot time for an upload |
 | `GET` | `/api/classes` | Object-type counts for the filter sidebar |
@@ -262,6 +268,13 @@ Simple-ADExplorer/
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `dn` | string | Exact Distinguished Name to look up |
+| `upload_id` | int | Restrict the search to one upload (recommended) |
+
+### `/api/objects/by-sid` query parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sid` | string | Exact `objectSid` to look up (e.g. `S-1-5-21-...-512`) |
 | `upload_id` | int | Restrict the search to one upload (recommended) |
 
 
