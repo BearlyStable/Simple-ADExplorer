@@ -936,6 +936,28 @@ def api_by_dn():
     return jsonify({"id": row["id"]})
 
 
+@app.route("/api/objects/by-sid")
+def api_by_sid():
+    sid = request.args.get("sid", "").strip()
+    uid = request.args.get("upload_id", type=int)
+    if not sid:
+        return jsonify(error="Missing sid parameter"), 400
+    with get_db() as conn:
+        if uid:
+            row = conn.execute(
+                "SELECT id FROM objects WHERE upload_id=? AND json_extract(fields_json, '$.objectSid')=?",
+                (uid, sid),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id FROM objects WHERE json_extract(fields_json, '$.objectSid')=? LIMIT 1",
+                (sid,),
+            ).fetchone()
+    if not row:
+        return jsonify(error="Not found"), 404
+    return jsonify({"id": row["id"]})
+
+
 @app.route("/api/objects/<int:oid>/comment", methods=["PATCH"])
 def api_set_comment(oid):
     body = request.get_json(silent=True) or {}
