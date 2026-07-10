@@ -589,17 +589,68 @@ const DOMAIN_RID_NAMES = {
   526: 'Key Admins', 527: 'Enterprise Key Admins', 553: 'RAS and IAS Servers',
 };
 
-// Verified against Microsoft's AD schema "Extended Rights" reference — GUIDs used
-// with the DS_CONTROL_ACCESS bit to name the specific extended/validated-write right.
-const RIGHTS_GUIDS = {
+// GUID → name maps for the ACE "ObjectType" field. Which map applies depends on
+// which right bit accompanies the GUID on the same ACE — the AD schema reuses
+// the same GUID value for an attribute and for that attribute's "Self" validated
+// write, so the same GUID means different things depending on context.
+// All verified against Microsoft's AD schema reference (learn.microsoft.com/windows/win32/adschema).
+
+// Used with the DS_CONTROL_ACCESS bit (0x100) — extended rights.
+const EXTENDED_RIGHT_GUIDS = {
   '00299570-246d-11d0-a768-00aa006e0529': 'User-Force-Change-Password',
   'ab721a53-1e2f-11d0-9819-00aa0040529b': 'User-Change-Password',
   '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Get-Changes',
   '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Get-Changes-All',
   '89e95b76-444d-4c62-991a-0facbeda640c': 'DS-Replication-Get-Changes-In-Filtered-Set',
   '1131f6ab-9c07-11d1-f79f-00c04fc2dcd2': 'DS-Replication-Synchronize',
-  'bf9679c0-0de6-11d0-a285-00aa003049e2': 'Self-Membership (Add/Remove self as member)',
+  'ab721a54-1e2f-11d0-9819-00aa0040529b': 'Send-As',
+  'ab721a56-1e2f-11d0-9819-00aa0040529b': 'Receive-As',
 };
+
+// Used with the DS_SELF bit (0x08) — validated writes.
+const VALIDATED_WRITE_GUIDS = {
+  'bf9679c0-0de6-11d0-a285-00aa003049e2': 'Self-Membership (Add/Remove self as member)',
+  'f3a64788-5306-11d1-a9c5-0000f80367c1': 'Validated-SPN',
+  '72e39547-7b18-11d1-adef-00c04fd8d5cd': 'Validated-DNS-Host-Name',
+};
+
+// Used with the DS_READ_PROP / DS_WRITE_PROP bits (0x10 / 0x20) — attribute schemaIDGUIDs.
+const ATTRIBUTE_GUIDS = {
+  'bf9679c0-0de6-11d0-a285-00aa003049e2': 'member',
+  'f3a64788-5306-11d1-a9c5-0000f80367c1': 'servicePrincipalName',
+  '72e39547-7b18-11d1-adef-00c04fd8d5cd': 'dNSHostName',
+  '5b47d60f-6090-40b2-9f37-2a4de88f3063': 'msDS-KeyCredentialLink',
+  '3f78c3e5-f79a-46bd-a0b8-9d18116ddc79': 'msDS-AllowedToActOnBehalfOfOtherIdentity',
+  '4c164200-20c0-11d0-a768-00aa006e0529': 'User-Account-Restrictions (property set)',
+  'bc0ac240-79a9-11d0-9020-00c04fc2d4cf': 'Membership (property set)',
+  '59ba2f42-79a2-11d0-9020-00c04fc2d3cf': 'General-Information (property set)',
+  'e48d0154-bcf8-11d1-8702-00c04fb96050': 'Public-Information (property set)',
+  '5f202010-79a5-11d0-9020-00c04fc2d4cf': 'User-Logon (property set)',
+  '77b5b886-944a-11d1-aebd-0000f80367c1': 'Personal-Information (property set)',
+  'e45795b3-9455-11d1-aebd-0000f80367c1': 'Web-Information (property set)',
+  'e45795b2-9455-11d1-aebd-0000f80367c1': 'Email-Information (property set)',
+  '037088f8-0ae1-11d2-b422-00a0c968f939': 'RAS-Information (property set)',
+  '5805bc62-bdc9-4428-a5e2-856a0f4c185e': 'Terminal-Server-License-Server (property set)',
+  'bf967a7f-0de6-11d0-a285-00aa003049e2': 'userCertificate',
+  '46a9b11d-60ae-405a-b7e8-ff8a58d456d2': 'tokenGroupsGlobalAndUniversal',
+  '6db69a1c-9422-11d1-aebd-0000f80367c1': 'terminalServer',
+  'b7c69e6d-2cc7-11d2-854e-00a0c983f608': 'tokenGroups',
+  'ea1b7b93-5e48-46d5-bc6c-4df4fda78a35': 'msTPM-TpmInformationForComputer',
+  '91e647de-d96f-4b70-9557-d63ff4f3ccd8': 'Private-Information (property set)',
+  // Server 2016+ control access right that also serves as msDS-KeyCredentialLink's
+  // attributeSecurityGUID — an ACE scoped to THIS guid grants write access to it too,
+  // in addition to (or instead of) the narrower per-attribute GUID above.
+  '9b026da6-0d3c-465c-8bee-5199d7165cba': 'DS-Validated-Write-Computer (incl. msDS-KeyCredentialLink)',
+};
+
+function resolveObjectTypeName(objectType, mask) {
+  if (!objectType) return null;
+  const guid = objectType.toLowerCase();
+  if (mask & 0x00000100) return EXTENDED_RIGHT_GUIDS[guid] || null;
+  if (mask & 0x00000008) return VALIDATED_WRITE_GUIDS[guid] || null;
+  if (mask & 0x00000030) return ATTRIBUTE_GUIDS[guid] || null;
+  return null;
+}
 
 const ACE_TYPE_NAMES = {
   0x00: 'Allow', 0x01: 'Deny', 0x02: 'Audit', 0x03: 'Alarm',
@@ -698,7 +749,7 @@ function parseAce(bytes, offset) {
     inherited: !!(flags & 0x10),
     rights: decodeAccessMask(mask),
     objectType,
-    objectTypeName: objectType ? RIGHTS_GUIDS[objectType.toLowerCase()] || null : null,
+    objectTypeName: resolveObjectTypeName(objectType, mask),
     inheritedObjectType,
     trusteeSid,
     size,
@@ -789,45 +840,6 @@ function toggleRawSD(id) {
 }
 window.toggleRawSD = toggleRawSD;
 
-// Principals for which broad control is expected/by-design, so flagging them
-// as "risky" would just be noise — these are excluded from the risk heuristic.
-const SAFE_PRINCIPAL_NAMES = new Set([
-  'Domain Admins', 'Enterprise Admins', 'Administrator', 'Schema Admins',
-  'BUILTIN\\Administrators', 'Local System', 'Enterprise Domain Controllers',
-  'Principal Self',
-]);
-
-// Best-effort heuristic for "commonly abused for AD privilege escalation /
-// lateral movement" — the same class of rights BloodHound-style tooling flags
-// as high-value edges. This is NOT a definitive vulnerability finding: an
-// Allow ACE granting one of these to a principal that legitimately needs it
-// is normal. Always verify the grantee is expected to hold this access.
-function assessAceRisk(ace) {
-  if (ace.isDeny || ace.isAudit) return null;
-  const known = wellKnownSidInfo(ace.trusteeSid);
-  if (known && SAFE_PRINCIPAL_NAMES.has(known.name)) return null;
-
-  const reasons = [];
-  if (ace.rights.includes('GenericAll')) reasons.push('Full control of the object');
-  if (ace.rights.includes('GenericWrite')) reasons.push('Can modify most attributes');
-  if (ace.rights.includes('WriteDacl')) reasons.push('Can grant itself (or anyone) any other permission');
-  if (ace.rights.includes('WriteOwner')) reasons.push('Can take ownership of the object');
-  if (ace.rights.includes('WriteProperty') && !ace.objectType) reasons.push('Can write any attribute');
-  if (ace.rights.includes('Self (Validated Write)') && !ace.objectType) reasons.push('Can perform any validated write');
-  if (ace.rights.includes('ControlAccess (Extended Right)')) {
-    if (!ace.objectType) {
-      reasons.push('Holds every extended right (password reset, replication, …)');
-    } else if (ace.objectTypeName === 'User-Force-Change-Password') {
-      reasons.push("Can reset this account's password without knowing it");
-    } else if (ace.objectTypeName === 'DS-Replication-Get-Changes' || ace.objectTypeName === 'DS-Replication-Get-Changes-All') {
-      reasons.push('Part of the rights needed for a DCSync attack');
-    } else if (ace.objectTypeName === 'Self-Membership (Add/Remove self as member)') {
-      reasons.push('Can add itself to this group');
-    }
-  }
-  return reasons.length ? reasons : null;
-}
-
 function renderAceRow(ace) {
   const rightsHtml = ace.rights.map(r => `<span class="ace-right" style="display:inline-block;background:#1e293b;border:1px solid #334155;border-radius:4px;padding:1px 6px;margin:1px;font-size:0.7rem;color:#e2e8f0">${esc(r)}</span>`).join('');
   const objectTypeHtml = ace.objectType
@@ -835,21 +847,12 @@ function renderAceRow(ace) {
     : '<span style="color:#334155">—</span>';
   const kindColor = ace.isDeny ? '#f87171' : ace.isAudit ? '#fbbf24' : '#6ee7b7';
 
-  const risk = assessAceRisk(ace);
-  const rowStyle = risk
-    ? 'border-bottom:1px solid #1e293b;background:rgba(248,113,113,0.08)'
-    : 'border-bottom:1px solid #1e293b';
-  const riskHtml = risk
-    ? `<span title="${esc(risk.join('; '))}" style="display:inline-flex;align-items:center;gap:3px;color:#f87171;font-weight:600;font-size:0.7rem;white-space:nowrap">⚠ Risky</span>`
-    : '<span style="color:#334155">—</span>';
-
-  return `<tr style="${rowStyle}">
+  return `<tr style="border-bottom:1px solid #1e293b">
     <td style="padding:4px 8px;color:${kindColor};font-weight:600;white-space:nowrap;vertical-align:top">${ace.isDeny ? 'Deny' : ace.isAudit ? 'Audit' : 'Allow'}</td>
     <td style="padding:4px 8px;vertical-align:top;white-space:nowrap">${renderSidCell(ace.trusteeSid)}</td>
     <td style="padding:4px 8px;vertical-align:top">${rightsHtml}</td>
     <td style="padding:4px 8px;vertical-align:top;font-size:0.75rem;color:#94a3b8">${objectTypeHtml}</td>
     <td style="padding:4px 8px;vertical-align:top;font-size:0.72rem;color:#475569;white-space:nowrap">${ace.inherited ? 'Inherited' : 'Explicit'}</td>
-    <td style="padding:4px 8px;vertical-align:top">${riskHtml}</td>
   </tr>`;
 }
 
@@ -866,18 +869,13 @@ function renderSecurityDescriptorField(b64, shortId, objName) {
   const daclCount = sd.dacl ? sd.dacl.length : 0;
   const saclCount = sd.sacl ? sd.sacl.length : 0;
   const denyCount = sd.dacl ? sd.dacl.filter(a => a.isDeny).length : 0;
-  const riskyCount = sd.dacl ? sd.dacl.filter(a => assessAceRisk(a)).length : 0;
 
   const summary = daclCount
     ? `${daclCount} DACL entr${daclCount === 1 ? 'y' : 'ies'}${denyCount ? ` (${denyCount} deny)` : ''}${saclCount ? ` · ${saclCount} audit` : ''}`
     : 'No DACL — full access to everyone';
-  const riskyBadge = riskyCount
-    ? `<span style="color:#f87171;font-size:0.72rem;font-weight:600">⚠ ${riskyCount} risky</span>`
-    : '';
 
   return `<div style="display:flex;align-items:center;gap:10px">
     <span style="color:#94a3b8;font-size:0.78rem">${esc(summary)}</span>
-    ${riskyBadge}
     <button class="btn btn-ghost" style="padding:2px 10px;font-size:0.72rem" onclick="openAclModal('${shortId}');return false">View permissions table</button>
   </div>`;
 }
@@ -890,16 +888,11 @@ function renderAclModalHtml(shortId) {
   const header = `<tr style="text-align:left;color:#64748b;font-size:0.68rem;text-transform:uppercase">
       <th style="padding:4px 8px">Type</th><th style="padding:4px 8px">Trustee</th>
       <th style="padding:4px 8px">Rights</th><th style="padding:4px 8px">Applies To</th><th style="padding:4px 8px">Inheritance</th>
-      <th style="padding:4px 8px">Risk</th>
     </tr>`;
 
   let html = `<div style="font-size:0.78rem;margin-bottom:8px;color:#94a3b8">
       Owner: ${sd.owner ? renderSidCell(sd.owner) : '<span style="color:#334155">—</span>'}
       &nbsp;·&nbsp; Group: ${sd.group ? renderSidCell(sd.group) : '<span style="color:#334155">—</span>'}
-    </div>`;
-
-  html += `<div style="font-size:0.7rem;color:#475569;margin-bottom:10px">
-      <span style="color:#f87171">⚠ Risky</span> flags rights commonly abused for AD privilege escalation (full control, WriteDacl/Owner, password reset, DCSync, …) granted to a principal other than the usual admin groups. This is a heuristic, not a confirmed vulnerability — always check whether the grantee is actually expected to have this access.
     </div>`;
 
   html += `<div style="color:#3b82f6;font-size:0.7rem;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.06em">
