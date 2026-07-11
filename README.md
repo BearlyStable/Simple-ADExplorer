@@ -97,7 +97,20 @@ waitress-serve --port=5000 app:app
 
 ## Docker
 
-### Build the image
+### Pull the published image
+
+A GitHub Actions workflow (`.github/workflows/docker-publish.yml`) builds and publishes the image to the GitHub Container Registry:
+
+- Every push to `main` publishes `ghcr.io/nm1ss/simple-adexplorer:latest`
+- Every published GitHub Release publishes a version-tagged image, e.g. `ghcr.io/nm1ss/simple-adexplorer:1.0.0` (and `1.0`)
+
+```bash
+docker pull ghcr.io/nm1ss/simple-adexplorer:latest
+```
+
+> The `ghcr.io/nm1ss/simple-adexplorer` package must be set to **public** visibility in its GitHub package settings the first time it's published, otherwise `docker pull` requires authentication.
+
+### Build the image locally
 
 ```bash
 make release
@@ -139,6 +152,12 @@ docker compose -f docker/docker-compose.yml down -v
 ```
 
 The compose file uses named volumes and sets `restart: unless-stopped` so the container starts automatically after a reboot.
+
+### Cutting a release
+
+1. Tag the commit and push the tag, e.g. `git tag v1.0.0 && git push origin v1.0.0`.
+2. Create a GitHub Release from that tag (GitHub UI: **Releases → Draft a new release**, or `gh release create v1.0.0`).
+3. Publishing the release triggers `.github/workflows/docker-publish.yml`, which builds and pushes `ghcr.io/nm1ss/simple-adexplorer:1.0.0` (and `:1.0`) to GHCR — no manual `make release` / file upload needed.
 
 ### Backup and restore
 

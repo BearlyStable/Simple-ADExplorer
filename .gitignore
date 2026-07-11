@@ -22,3 +22,4 @@ __pycache__/
 
 # don't include the built tar.gz files
 /*simple-adexplorer-*.tar.gz
+CLAUDE.md
