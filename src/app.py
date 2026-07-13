@@ -62,6 +62,7 @@ def init_db():
             distinguished_name   TEXT,
             sam_account_name     TEXT,
             user_principal_name  TEXT,
+            display_name         TEXT,
             description          TEXT,
             -- ISO-8601 UTC datetimes (NULL when not present / never / overflow)
             when_created         TEXT,
@@ -108,6 +109,14 @@ def init_db():
             conn.execute("""
                 UPDATE objects SET object_guid = json_extract(fields_json, '$.objectGUID')
                 WHERE object_guid IS NULL AND fields_json IS NOT NULL
+            """)
+
+        # Add display_name column to objects table if it doesn't exist, and backfill it from fields_json.displayName.
+        if "display_name" not in obj_cols:
+            conn.execute("ALTER TABLE objects ADD COLUMN display_name TEXT")
+            conn.execute("""
+                UPDATE objects SET display_name = json_extract(fields_json, '$.displayName')
+                WHERE display_name IS NULL AND fields_json IS NOT NULL
             """)
 
         upload_cols = {row["name"] for row in conn.execute("PRAGMA table_info(uploads)")}
@@ -322,6 +331,7 @@ def store_objects(upload_id: int, objects: list[dict]):
             _str_field(obj, "distinguishedName"),
             _str_field(obj, "sAMAccountName"),
             _str_field(obj, "userPrincipalName"),
+            _str_field(obj, "displayName"),
             _str_field(obj, "description"),
             gentime_to_dt(obj.get("whenCreated")),
             gentime_to_dt(obj.get("whenChanged")),
@@ -339,11 +349,11 @@ def store_objects(upload_id: int, objects: list[dict]):
         conn.executemany(
             """INSERT INTO objects (
                 upload_id, object_index, object_class, primary_class,
-                cn, distinguished_name, sam_account_name, user_principal_name, description,
+                cn, distinguished_name, sam_account_name, user_principal_name, display_name, description,
                 when_created, when_changed, pwd_last_set,
                 last_logon, last_logon_timestamp, bad_password_time,
                 user_account_control, admin_count, object_guid, fields_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             rows,
         )
         conn.execute(
@@ -412,15 +422,15 @@ def diff_with_baseline(conn, new_upload_id: int, base_upload_id: int):
         conn.execute(
             """INSERT INTO objects (
                 upload_id, object_index, object_class, primary_class,
-                cn, distinguished_name, sam_account_name, user_principal_name,
+                cn, distinguished_name, sam_account_name, user_principal_name, display_name,
                 description, when_created, when_changed, pwd_last_set,
                 last_logon, last_logon_timestamp, bad_password_time,
                 user_account_control, admin_count,
                 is_favorite, comment, tags, object_guid, fields_json
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (new_upload_id, row["object_index"], row["object_class"], row["primary_class"],
              row["cn"], row["distinguished_name"], row["sam_account_name"],
-             row["user_principal_name"], row["description"],
+             row["user_principal_name"], row["display_name"], row["description"],
              row["when_created"], row["when_changed"], row["pwd_last_set"],
              row["last_logon"], row["last_logon_timestamp"], row["bad_password_time"],
              row["user_account_control"], row["admin_count"],
@@ -599,6 +609,7 @@ _OP_STRING = {
     'sam':  'sam_account_name',
     'dn':   'distinguished_name',
     'desc': 'description',
+    'displayname': 'display_name',
 }
 
 _OP_DATE = {
@@ -839,6 +850,7 @@ def api_list_objects():
 EXPORT_FIELDS = {
     "cn":                  "Name",
     "sam_account_name":    "SAM Account Name",
+    "display_name":        "Display Name",
     "primary_class":       "Type",
     "distinguished_name":  "Distinguished Name",
     "user_principal_name": "UPN",

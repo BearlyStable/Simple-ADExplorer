@@ -1410,6 +1410,7 @@ qs('#save-snapshot-btn').addEventListener('click', async () => {
 const EXPORT_FIELDS = [
   ['cn',                  'Name',                true],
   ['sam_account_name',    'SAM Account Name',    true],
+  ['display_name',        'Display Name',        false],
   ['primary_class',       'Type',                true],
   ['distinguished_name',  'Distinguished Name',  false],
   ['user_principal_name', 'UPN',                 false],

@@ -306,6 +306,7 @@ The search bar accepts plain text (searches CN, SAM, DN, description and all raw
 | `cn:` | Common name | `cn:admin*`, `cn:"John Smith"` |
 | `sam:` | SAM account name | `sam:svc_*` |
 | `dn:` | Distinguished name | `dn:*,OU=Admin*` |
+| `displayname:` | Display name | `displayname:"Smith*"` |
 | `desc:` | Description field | `desc:*server*` |
 | `admin:yes/no` | adminCount = 1 | `admin:yes`, `-admin:yes` |
 | `disabled:yes/no` | UAC disabled flag | `disabled:yes` |
