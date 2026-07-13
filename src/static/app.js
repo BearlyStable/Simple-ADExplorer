@@ -663,9 +663,6 @@ const OBJECT_ACE_TYPES = new Set([0x05, 0x06, 0x07, 0x08, 0x0B, 0x0C, 0x0E]);
 const DENY_ACE_TYPES  = new Set([0x01, 0x06, 0x0A, 0x0C]);
 const AUDIT_ACE_TYPES = new Set([0x02, 0x07, 0x08, 0x0D, 0x0E]);
 
-const GENERIC_RIGHTS = [
-  [0x80000000, 'GenericRead'], [0x40000000, 'GenericWrite'], [0x20000000, 'GenericExecute'],
-];
 const STANDARD_RIGHTS = [
   [0x00010000, 'Delete'], [0x00020000, 'ReadControl'], [0x00040000, 'WriteDacl'], [0x00080000, 'WriteOwner'],
 ];
@@ -676,12 +673,34 @@ const DS_RIGHTS = [
   [0x00000002, 'DeleteChild'], [0x00000001, 'CreateChild'],
 ];
 
+// Real AD security descriptors store "generic" rights as an expanded, specific-bit
+// combination (e.g. GenericAll shows up as 0x000F01FF, not the raw 0x10000000 bit) —
+// verified against BloodHound.py's own ACCESS_MASK constants, which encode this same
+// distinction ("only used when WRITING... when reading, actually represented by...").
+// We check for either form since both are technically valid per MS-DTYP.
 function decodeAccessMask(mask) {
-  if (mask & 0x10000000) return ['GenericAll'];
+  const isAll = (mask & 0x10000000) || (mask & 0x000F01FF) === 0x000F01FF;
+  if (isAll) return ['GenericAll'];
+
+  const isWrite = (mask & 0x40000000) || (mask & 0x00020028) === 0x00020028;
+  const isRead  = (mask & 0x80000000) || (mask & 0x00020094) === 0x00020094;
+  const isExec  = (mask & 0x20000000) || (mask & 0x00020004) === 0x00020004;
+  const anyGeneric = isWrite || isRead || isExec;
+
   const rights = [];
-  for (const [bit, name] of GENERIC_RIGHTS) if (mask & bit) rights.push(name);
-  for (const [bit, name] of STANDARD_RIGHTS) if (mask & bit) rights.push(name);
-  for (const [bit, name] of DS_RIGHTS) if (mask & bit) rights.push(name);
+  if (isWrite) rights.push('GenericWrite');
+  if (isRead) rights.push('GenericRead');
+  if (isExec) rights.push('GenericExecute');
+
+  // Avoid redundant badges for bits already implied by a detected generic combo.
+  const implied = new Set();
+  if (anyGeneric) implied.add(0x00020000); // ReadControl
+  if (isWrite) { implied.add(0x00000020); implied.add(0x00000008); } // WriteProperty, Self
+  if (isRead) { implied.add(0x00000010); implied.add(0x00000080); implied.add(0x00000004); } // ReadProperty, ListObject, ListChildren
+  if (isExec) implied.add(0x00000004); // ListChildren
+
+  for (const [bit, name] of STANDARD_RIGHTS) if ((mask & bit) && !implied.has(bit)) rights.push(name);
+  for (const [bit, name] of DS_RIGHTS) if ((mask & bit) && !implied.has(bit)) rights.push(name);
   return rights.length ? rights : [`0x${(mask >>> 0).toString(16)}`];
 }
 
