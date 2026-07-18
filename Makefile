@@ -25,7 +25,7 @@ help:
 setup: .venv/pyvenv.cfg src/adex_deps/.installed
 
 src/ADExplorerSnapshot/ADExplorerSnapshot.py:
-	git clone --depth 1 https://github.com/Nm1ss/ADExplorerSnapshot.git src/ADExplorerSnapshot
+	git clone --depth 1 https://github.com/c3c/ADExplorerSnapshot.git src/ADExplorerSnapshot
 
 .venv/pyvenv.cfg: requirements.txt src/ADExplorerSnapshot/ADExplorerSnapshot.py
 	$(PYTHON) -m venv .venv
