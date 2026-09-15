@@ -25,7 +25,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 INSTANCE_DIR.mkdir(exist_ok=True)
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024  # 512 MB
+app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
@@ -466,7 +466,7 @@ def convert_adsnapshot(snapshot_path: str) -> str:
             [sys.executable, str(ADEXPLORER_SCRIPT), "-o", str(tmp_out), "-m", "BOFHound", snapshot_path],
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=3600,
             env=env,
         )
         if result.returncode != 0:
