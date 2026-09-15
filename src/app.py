@@ -466,7 +466,7 @@ def convert_adsnapshot(snapshot_path: str) -> str:
             [sys.executable, str(ADEXPLORER_SCRIPT), "-o", str(tmp_out), "-m", "BOFHound", snapshot_path],
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=3600,
             env=env,
         )
         if result.returncode != 0:
